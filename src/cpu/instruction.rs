@@ -33,5 +33,11 @@ pub enum Instruction {
     Blt { rs1: u32, rs2: u32, imm: i32 },
     Bge { rs1: u32, rs2: u32, imm: i32 },
 
+    // I-Type 0x67
+    Jalr { rd: u32, rs1: u32, imm: i32 },
+
+    // UJ-Type 0x6f
+    Jal { rd: u32, imm: i32 },
+
     Unknown(u32),
 }

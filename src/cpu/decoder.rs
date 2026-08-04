@@ -51,7 +51,7 @@ pub fn decode(inst: u32) -> Instruction {
             (0x0, 0x00) => Instruction::Add { rd, rs1, rs2 },
             (0x0, 0x20) => Instruction::Sub { rd, rs1, rs2 },
             _ => Instruction::Unknown(inst),
-        }
+        },
 
         // 0x37 = 0110111 => U-Type (LUI)
         0x37 => {
@@ -78,7 +78,30 @@ pub fn decode(inst: u32) -> Instruction {
                 _ => Instruction::Unknown(inst),
             }
         }
-        
+
+        // 0x67 = 1100111 => I-Type (JALR)
+        0x67 => {
+            let imm = (inst as i32) >> 20; // Sign-extend the immediate
+            match funct3 {
+                0x0 => Instruction::Jalr { rd, rs1, imm },
+                _ => Instruction::Unknown(inst),
+            }
+        }
+
+        // 0x6f = 1101111 => UJ-Type (JAL)
+        0x6f => {
+            let imm_19_12 = (inst >> 12) & 0xff; // bits 12-19
+            let imm_11 = (inst >> 20) & 0x1; // bit 11
+            let imm_10_1 = (inst >> 21) & 0x3ff; // bits 1-10
+            let imm_20 = (inst >> 31) & 0x1; // bit 20
+
+            let raw_imm =
+                ((imm_20 << 20) | (imm_19_12 << 12) | (imm_11 << 11) | (imm_10_1 << 1)) as i32;
+            let imm = (raw_imm << 11) >> 11; // Sign-extend the immediate
+
+            Instruction::Jal { rd, imm }
+        }
+
         _ => Instruction::Unknown(inst),
     }
 }
