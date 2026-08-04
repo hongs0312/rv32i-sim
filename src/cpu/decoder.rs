@@ -24,6 +24,7 @@ pub fn decode(inst: u32) -> Instruction {
                 _ => Instruction::Unknown(inst),
             }
         }
+
         // 0x13 = 0010011 => I-Type Arithmetic Instructions
         0x13 => {
             let imm = (inst as i32) >> 20; // Sign-extend the immediate
@@ -33,6 +34,7 @@ pub fn decode(inst: u32) -> Instruction {
             }
         }
 
+        // 0x23 = 0100011 => S-Type Store Instructions
         0x23 => {
             let raw_imm = funct7 << 5 | rd; // S-Type raw immediate
             let imm = ((raw_imm as i32) << 20) >> 20; // Sign-extend the immediate
@@ -49,7 +51,13 @@ pub fn decode(inst: u32) -> Instruction {
             (0x0, 0x00) => Instruction::Add { rd, rs1, rs2 },
             (0x0, 0x20) => Instruction::Sub { rd, rs1, rs2 },
             _ => Instruction::Unknown(inst),
-        },
+        }
+
+        // 0x37 = 0110111 => U-Type (LUI)
+        0x37 => {
+            let imm = (inst & 0xfffff000) as i32; // 상위 20비트만 사용
+            Instruction::Lui { rd, imm }
+        }
 
         // 0x63 = 1100011 => SB-Type Branch Instructions
         0x63 => {
@@ -70,6 +78,7 @@ pub fn decode(inst: u32) -> Instruction {
                 _ => Instruction::Unknown(inst),
             }
         }
+        
         _ => Instruction::Unknown(inst),
     }
 }

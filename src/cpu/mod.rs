@@ -95,6 +95,11 @@ impl Cpu {
                 self.regs.write(rd, val);
             }
 
+            // U-Type Instructions (0x37, 0x17)
+            Instruction::Lui { rd, imm } => {
+                self.regs.write(rd, imm as u32);
+            }
+
             // SB-Type Branch Instructions (0x63)
             Instruction::Beq { rs1, rs2, imm } => {
                 if self.regs.read(rs1) == self.regs.read(rs2) {

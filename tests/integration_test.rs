@@ -219,3 +219,25 @@ fn test_branch_not_taken() {
     assert_eq!(cpu.regs.read(3), 1, "x3 레지스터는 1이어야 합니다.");
     assert_eq!(cpu.pc, 16);
 }
+
+#[test]
+fn test_lui_instruction() {
+    // -------------------------------------------------------------
+    // LUI 명령어 검증
+    // 0x00: lui x1, 0x12345      (x1 = 0x12345000) -> 0x123450b7
+    // -------------------------------------------------------------
+    let program = vec![
+        0x123450b7, // lui x1, 0x12345
+    ];
+
+    let mut cpu = create_test_cpu(&program);
+
+    // 1클럭 실행: lui x1, 0x12345
+    cpu.step();
+    assert_eq!(
+        cpu.regs.read(1),
+        0x12345000,
+        "x1 레지스터는 0x12345000이어야 합니다."
+    );
+    assert_eq!(cpu.pc, 4);
+}

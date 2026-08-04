@@ -23,6 +23,10 @@ pub enum Instruction {
     Add { rd: u32, rs1: u32, rs2: u32 },
     Sub { rd: u32, rs1: u32, rs2: u32 },
 
+    // U-Type 0x37, 0x17
+    Lui { rd: u32, imm: i32 },
+    // Auiipc { rd: u32, imm: i32 },
+
     // SB-Type 0x63
     Beq { rs1: u32, rs2: u32, imm: i32 },
     Bne { rs1: u32, rs2: u32, imm: i32 },
