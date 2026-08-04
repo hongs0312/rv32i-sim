@@ -99,3 +99,43 @@ fn test_negative_immediate_sign_extension() {
         "음수 부호 확장이 정상 동작해야 합니다."
     );
 }
+
+#[test]
+fn test_load_and_store_instructions() {
+    // -------------------------------------------------------------
+    // Load/Store 명령어 검증
+    // 0x00: addi x1, x0, 42       (x1 = 42) -> 0x02a00093
+    // 0x04: sw   x1, 0(x0)        (메모리[0] = 42) -> 0x00102023 (수정)
+    // 0x08: lw   x2, 0(x0)        (x2 = 메모리[0]) -> 0x00002103 (수정)
+    // -------------------------------------------------------------
+    let program = vec![
+        0x02a00093, // addi x1, x0, 42
+        0x00102023, // sw   x1, 0(x0)
+        0x00002103, // lw   x2, 0(x0)
+    ];
+
+    let mut cpu = create_test_cpu(&program);
+
+    // 1클럭 실행: addi x1, x0, 42
+    cpu.step();
+    assert_eq!(cpu.regs.read(1), 42, "x1 레지스터는 42이어야 합니다.");
+    assert_eq!(cpu.pc, 4);
+
+    // 2클럭 실행: sw x1, 0(x0)
+    cpu.step();
+    let stored_value = cpu.bus.load32(0).expect("메모리 로드 실패");
+    assert_eq!(
+        stored_value, 42,
+        "메모리[0]에는 42가 저장되어야 합니다."
+    );
+    assert_eq!(cpu.pc, 8);
+    
+    // 3클럭 실행: lw x2, 0(x0)
+    cpu.step();
+    assert_eq!(
+        cpu.regs.read(2),
+        42,
+        "x2 레지스터는 메모리[0]에서 로드한 값 42이어야 합니다."
+    );
+    assert_eq!(cpu.pc, 12);
+}
