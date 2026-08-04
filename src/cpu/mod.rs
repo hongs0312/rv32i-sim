@@ -62,18 +62,36 @@ impl Cpu {
                 self.regs.write(rd, val);
             }
 
+            // I-Type Arithmetic Instructions (0x13)
+            Instruction::Addi { rd, rs1, imm } => {
+                let val = self.regs.read(rs1).wrapping_add(imm as u32);
+                self.regs.write(rd, val);
+            }
 
+            // S-Type Store Instructions (0x23)
+            Instruction::Sb { rs1, rs2, imm } => {
+                let addr = self.regs.read(rs1).wrapping_add(imm as u32);
+                let val = self.regs.read(rs2) as u8;
+                self.bus.store8(addr, val).expect("Store failed");
+            }
+            Instruction::Sh { rs1, rs2, imm } => {
+                let addr = self.regs.read(rs1).wrapping_add(imm as u32);
+                let val = self.regs.read(rs2) as u16;
+                self.bus.store16(addr, val).expect("Store failed");
+            }
+            Instruction::Sw { rs1, rs2, imm } => {
+                let addr = self.regs.read(rs1).wrapping_add(imm as u32);
+                let val = self.regs.read(rs2);
+                self.bus.store32(addr, val).expect("Store failed");
+            }
+
+            // R-Type Instructions (0x33)
             Instruction::Add { rd, rs1, rs2 } => {
                 let val = self.regs.read(rs1) + self.regs.read(rs2);
                 self.regs.write(rd, val);
             }
             Instruction::Sub { rd, rs1, rs2 } => {
                 let val = self.regs.read(rs1) - self.regs.read(rs2);
-                self.regs.write(rd, val);
-            }
-            
-            Instruction::Addi { rd, rs1, imm } => {
-                let val = self.regs.read(rs1) + imm as u32;
                 self.regs.write(rd, val);
             }
 

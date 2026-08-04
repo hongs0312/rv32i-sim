@@ -17,6 +17,16 @@ impl Bus {
         Ok(self.dram.load32(addr as usize))
     }
 
+    pub fn store8(&mut self, addr: u32, value: u8) -> Result<(), ()> {
+        self.dram.store8(addr as usize, value);
+        Ok(())
+    }
+
+    pub fn store16(&mut self, addr: u32, value: u16) -> Result<(), ()> {
+        self.dram.store16(addr as usize, value);
+        Ok(())
+    }
+
     pub fn store32(&mut self, addr: u32, value: u32) -> Result<(), ()> {
         self.dram.store32(addr as usize, value);
         Ok(())

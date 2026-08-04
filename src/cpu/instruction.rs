@@ -15,6 +15,9 @@ pub enum Instruction {
     // Slli { rd: usize, rs1: u32, imm: i32 },
 
     // S-Type
+    Sb { rs1: u32, rs2: u32, imm: i32 },
+    Sh { rs1: u32, rs2: u32, imm: i32 },
+    Sw { rs1: u32, rs2: u32, imm: i32 },
 
     // R-Type
     Add { rd: u32, rs1: u32, rs2: u32 },
