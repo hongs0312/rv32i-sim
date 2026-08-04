@@ -241,3 +241,25 @@ fn test_lui_instruction() {
     );
     assert_eq!(cpu.pc, 4);
 }
+
+#[test]
+fn test_jal_instruction() {
+    // -------------------------------------------------------------
+    // JAL 명령어 검증
+    // 0x00: jal x1, 8            (x1 = PC + 4, PC += 8) -> 0x008000ef
+    // -------------------------------------------------------------
+    let program = vec![
+        0x008000ef, // jal x1, 8
+    ];
+
+    let mut cpu = create_test_cpu(&program);
+
+    // 1클럭 실행: jal x1, 8
+    cpu.step();
+    assert_eq!(
+        cpu.regs.read(1),
+        4,
+        "x1 레지스터는 현재 PC + 4 (즉, 4)이어야 합니다."
+    );
+    assert_eq!(cpu.pc, 8, "JAL 명령어로 인해 PC는 8만큼 증가해야 합니다.");
+}

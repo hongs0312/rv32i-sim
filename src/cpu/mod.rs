@@ -132,16 +132,16 @@ impl Cpu {
                 let return_address = self.pc; // 이미 PC는 4 증가했으므로 현재 PC를 반환 주소로 사용
 
                 self.regs.write(rd, return_address);
-                self.pc = target;
+                self.pc = target - 4; // 이미 PC는 4 증가했으므로 보정
             }
 
-            // UJ-Type Jump and Link (0x6f)
+            // 
             Instruction::Jal { rd, imm } => {
                 let target = self.pc.wrapping_add(imm as u32) & !1; // 최하위비트를 0으로 설정
                 let return_address = self.pc; // 이미 PC는 4 증가했으므로 현재 PC를 반환 주소로 사용
 
                 self.regs.write(rd, return_address);
-                self.pc = target;
+                self.pc = target - 4; // 이미 PC는 4 증가했으므로 보정
             }
 
             Instruction::Unknown(raw) => panic!("Unknown instruction: {:#x}", raw),
