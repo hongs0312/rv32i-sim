@@ -124,12 +124,9 @@ fn test_load_and_store_instructions() {
     // 2클럭 실행: sw x1, 0(x0)
     cpu.step();
     let stored_value = cpu.bus.load32(0).expect("메모리 로드 실패");
-    assert_eq!(
-        stored_value, 42,
-        "메모리[0]에는 42가 저장되어야 합니다."
-    );
+    assert_eq!(stored_value, 42, "메모리[0]에는 42가 저장되어야 합니다.");
     assert_eq!(cpu.pc, 8);
-    
+
     // 3클럭 실행: lw x2, 0(x0)
     cpu.step();
     assert_eq!(
@@ -138,4 +135,87 @@ fn test_load_and_store_instructions() {
         "x2 레지스터는 메모리[0]에서 로드한 값 42이어야 합니다."
     );
     assert_eq!(cpu.pc, 12);
+}
+
+#[test]
+fn test_branch_equal_instruction() {
+    // -------------------------------------------------------------
+    // BEQ 명령어 검증
+    // 0x00: addi x1, x0, 5       (x1 = 5) -> 0x00500093
+    // 0x04: addi x2, x0, 5       (x2 = 5) -> 0x00500113
+    // 0x08: beq  x1, x2, 8       (x1 == x2이면 PC += 8) -> 0x00208463
+    // 0x0C: addi x3, x0, 1       (x3 = 1) -> 0x00100193
+    // 0x10: addi x3, x0, 2       (x3 = 2) -> 0x00200193
+    // -------------------------------------------------------------
+    let program = vec![
+        0x00500093, // addi x1, x0, 5
+        0x00500113, // addi x2, x0, 5
+        0x00208463, // beq  x1, x2, 8
+        0x00100193, // addi x3, x0, 1
+        0x00200193, // addi x3, x0, 2
+    ];
+
+    let mut cpu = create_test_cpu(&program);
+
+    // 1클럭 실행: addi x1, x0, 5
+    cpu.step();
+    assert_eq!(cpu.regs.read(1), 5, "x1 레지스터는 5이어야 합니다.");
+    assert_eq!(cpu.pc, 4);
+
+    // 2클럭 실행: addi x2, x0, 5
+    cpu.step();
+    assert_eq!(cpu.regs.read(2), 5, "x2 레지스터는 5이어야 합니다.");
+    assert_eq!(cpu.pc, 8);
+
+    // 3클럭 실행: beq x1, x2, 8
+    cpu.step();
+    // x1 == x2이므로 PC는 8만큼 증가해야 함
+    assert_eq!(cpu.pc, 16, "BEQ 명령어로 인해 PC는 8만큼 증가해야 합니다.");
+
+    // 4클럭 실행: addi x3, x0, 2 (x3 = 2)
+    cpu.step();
+    assert_eq!(cpu.regs.read(3), 2, "x3 레지스터는 2이어야 합니다.");
+    assert_eq!(cpu.pc, 20);
+}
+
+#[test]
+fn test_branch_not_taken() {
+    // -------------------------------------------------------------
+    // BEQ 명령어가 분기하지 않는 경우 검증
+    // 0x00: addi x1, x0, 5       (x1 = 5) -> 0x00500093
+    // 0x04: addi x2, x0, 10      (x2 = 10) -> 0x00a00113
+    // 0x08: beq  x1, x2, 8       (x1 != x2이므로 분기하지 않음) -> 0x00208463
+    // 0x0C: addi x3, x0, 1       (x3 = 1) -> 0x00100193
+    // -------------------------------------------------------------
+    let program = vec![
+        0x00500093, // addi x1, x0, 5
+        0x00a00113, // addi x2, x0, 10
+        0x00208463, // beq  x1, x2 8
+        0x00100193, // addi x3, x0, 1
+    ];
+
+    let mut cpu = create_test_cpu(&program);
+
+    // 1클럭 실행: addi x1, x0, 5
+    cpu.step();
+    assert_eq!(cpu.regs.read(1), 5, "x1 레지스터는 5이어야 합니다.");
+    assert_eq!(cpu.pc, 4);
+
+    // 2클럭 실행: addi x2, x0, 10
+    cpu.step();
+    assert_eq!(cpu.regs.read(2), 10, "x2 레지스터는 10이어야 합니다.");
+    assert_eq!(cpu.pc, 8);
+
+    // 3클럭 실행: beq x1, x2, 8
+    cpu.step();
+    // x1 != x2이므로 분기하지 않고 다음 명령어로 진행
+    assert_eq!(
+        cpu.pc, 12,
+        "BEQ 명령어가 분기하지 않으므로 PC는 4만큼 증가해야 합니다."
+    );
+
+    // 4클럭 실행: addi x3, x0, 1 (x3 = 1)
+    cpu.step();
+    assert_eq!(cpu.regs.read(3), 1, "x3 레지스터는 1이어야 합니다.");
+    assert_eq!(cpu.pc, 16);
 }

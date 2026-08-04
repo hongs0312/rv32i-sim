@@ -50,7 +50,26 @@ pub fn decode(inst: u32) -> Instruction {
             (0x0, 0x20) => Instruction::Sub { rd, rs1, rs2 },
             _ => Instruction::Unknown(inst),
         },
-        
+
+        // 0x63 = 1100011 => SB-Type Branch Instructions
+        0x63 => {
+            let imm_10_5 = funct7 & 0x3f; // bits 5-10
+            let imm_12 = funct7 >> 6; // bit 12
+            let imm_11 = rd & 0x01; // bit 11
+            let imm_4_1 = rd >> 1; // bits 1-4
+
+            let raw_imm =
+                ((imm_12 << 12) | (imm_11 << 11) | (imm_10_5 << 5) | (imm_4_1 << 1)) as i32;
+            let imm = (raw_imm << 19) >> 19; // Sign-extend the immediate
+
+            match funct3 {
+                0x0 => Instruction::Beq { rs1, rs2, imm },
+                0x1 => Instruction::Bne { rs1, rs2, imm },
+                0x4 => Instruction::Blt { rs1, rs2, imm },
+                0x5 => Instruction::Bge { rs1, rs2, imm },
+                _ => Instruction::Unknown(inst),
+            }
+        }
         _ => Instruction::Unknown(inst),
     }
 }

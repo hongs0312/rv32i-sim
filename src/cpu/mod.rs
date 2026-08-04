@@ -95,6 +95,32 @@ impl Cpu {
                 self.regs.write(rd, val);
             }
 
+            // SB-Type Branch Instructions (0x63)
+            Instruction::Beq { rs1, rs2, imm } => {
+                if self.regs.read(rs1) == self.regs.read(rs2) {
+                    self.pc = self.pc.wrapping_sub(4); // 이미 PC는 4 증가했으므로 보정
+                    self.pc = self.pc.wrapping_add(imm as u32);
+                }
+            }
+            Instruction::Bne { rs1, rs2, imm } => {
+                if self.regs.read(rs1) != self.regs.read(rs2) {
+                    self.pc = self.pc.wrapping_sub(4); // 이미 PC는 4 증가했으므로 보정
+                    self.pc = self.pc.wrapping_add(imm as u32);
+                }
+            }
+            Instruction::Blt { rs1, rs2, imm } => {
+                if (self.regs.read(rs1) as i32) < (self.regs.read(rs2) as i32) {
+                    self.pc = self.pc.wrapping_sub(4); // 이미 PC는 4 증가했으므로 보정
+                    self.pc = self.pc.wrapping_add(imm as u32);
+                }
+            }
+            Instruction::Bge { rs1, rs2, imm } => {
+                if (self.regs.read(rs1) as i32) >= (self.regs.read(rs2) as i32) {
+                    self.pc = self.pc.wrapping_sub(4); // 이미 PC는 4 증가했으므로 보정
+                    self.pc = self.pc.wrapping_add(imm as u32);
+                }
+            }
+
             Instruction::Unknown(raw) => panic!("Unknown instruction: {:#x}", raw),
         }
     }
