@@ -12,6 +12,18 @@ pub fn decode(inst: u32) -> Instruction {
     let funct7 = (inst >> 25) & 0x7f; // 25~31 bits
 
     match opcode {
+        0x03 => {
+            let imm = (inst as i32) >> 20; // Sign-extend the immediate
+            match funct3 {
+                0x0 => Instruction::Lb { rd, rs1, imm },
+                0x1 => Instruction::Lh { rd, rs1, imm },
+                0x2 => Instruction::Lw { rd, rs1, imm },
+                0x4 => Instruction::Lbu { rd, rs1, imm },
+                0x5 => Instruction::Lhu { rd, rs1, imm },
+                _ => Instruction::Unknown(inst),
+            }
+        }
+
         // 0x33 = 0110011 => R-Type
         0x33 => match (funct3, funct7) {
             (0x0, 0x00) => Instruction::Add { rd, rs1, rs2 },

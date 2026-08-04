@@ -9,6 +9,15 @@ impl Dram {
         }
     }
 
+    pub fn load8(&self, addr: usize) -> u8 {
+        u8::from_le_bytes([self.dram[addr]])
+    }
+
+    pub fn load16(&self, addr: usize) -> u16 {
+        let bytes = &self.dram[addr..addr + 2];
+        u16::from_le_bytes(bytes.try_into().expect("Slice with incorrect length"))
+    }
+
     pub fn load32(&self, addr: usize) -> u32 {
         let bytes = &self.dram[addr..addr + 4];
         u32::from_le_bytes(bytes.try_into().expect("Slice with incorrect length"))

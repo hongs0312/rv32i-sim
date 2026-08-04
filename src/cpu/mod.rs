@@ -35,6 +35,34 @@ impl Cpu {
         self.pc += 4; // 기본 PC 증가 (4바이트)
 
         match inst {
+            // I-Type Load Instructions (0x03)
+            Instruction::Lb { rd, rs1, imm } => {
+                let addr = self.regs.read(rs1).wrapping_add(imm as u32);
+                let val = self.bus.load8(addr).expect("Load failed") as i8 as u32; // Sign-extend이므로 한 번 변환 후 u32로 변환
+                self.regs.write(rd, val);
+            }
+            Instruction::Lh { rd, rs1, imm } => {
+                let addr = self.regs.read(rs1).wrapping_add(imm as u32);
+                let val = self.bus.load16(addr).expect("Load failed") as i16 as u32; // Sign-extend
+                self.regs.write(rd, val);
+            }
+            Instruction::Lw { rd, rs1, imm } => {
+                let addr = self.regs.read(rs1).wrapping_add(imm as u32);
+                let val = self.bus.load32(addr).expect("Load failed");
+                self.regs.write(rd, val);
+            }
+            Instruction::Lbu { rd, rs1, imm } => {
+                let addr = self.regs.read(rs1).wrapping_add(imm as u32);
+                let val = self.bus.load8(addr).expect("Load failed") as u32;
+                self.regs.write(rd, val);
+            }
+            Instruction::Lhu { rd, rs1, imm } => {
+                let addr = self.regs.read(rs1).wrapping_add(imm as u32);
+                let val = self.bus.load16(addr).expect("Load failed") as u32;
+                self.regs.write(rd, val);
+            }
+
+
             Instruction::Add { rd, rs1, rs2 } => {
                 let val = self.regs.read(rs1) + self.regs.read(rs2);
                 self.regs.write(rd, val);
@@ -43,9 +71,9 @@ impl Cpu {
                 let val = self.regs.read(rs1) - self.regs.read(rs2);
                 self.regs.write(rd, val);
             }
+            
             Instruction::Addi { rd, rs1, imm } => {
                 let val = self.regs.read(rs1) + imm as u32;
-                println!("Executing ADDI: x{} = x{} + {} => {}", rd, rs1, imm, val);
                 self.regs.write(rd, val);
             }
 
