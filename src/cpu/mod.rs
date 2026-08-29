@@ -31,6 +31,8 @@ impl Cpu {
         let inst = decode(raw_inst);
         // println!("Decoded instruction: {:?}", inst);
 
+        let cur_pc = self.pc;
+
         // 3. Execute & Write Back
         self.pc += 4; // 기본 PC 증가 (4바이트)
 
@@ -87,11 +89,11 @@ impl Cpu {
 
             // R-Type Instructions (0x33)
             Instruction::Add { rd, rs1, rs2 } => {
-                let val = self.regs.read(rs1) + self.regs.read(rs2);
+                let val = self.regs.read(rs1).wrapping_add(self.regs.read(rs2)); // wrapping_add를 사용하여 오버플로우를 허용
                 self.regs.write(rd, val);
             }
             Instruction::Sub { rd, rs1, rs2 } => {
-                let val = self.regs.read(rs1) - self.regs.read(rs2);
+                let val = self.regs.read(rs1).wrapping_sub(self.regs.read(rs2)); // wrapping_sub를 사용하여 오버플로우를 허용
                 self.regs.write(rd, val);
             }
 
@@ -103,45 +105,41 @@ impl Cpu {
             // SB-Type Branch Instructions (0x63)
             Instruction::Beq { rs1, rs2, imm } => {
                 if self.regs.read(rs1) == self.regs.read(rs2) {
-                    self.pc = self.pc.wrapping_sub(4); // 이미 PC는 4 증가했으므로 보정
-                    self.pc = self.pc.wrapping_add(imm as u32);
+                    self.pc = cur_pc.wrapping_add(imm as u32);
                 }
             }
             Instruction::Bne { rs1, rs2, imm } => {
                 if self.regs.read(rs1) != self.regs.read(rs2) {
-                    self.pc = self.pc.wrapping_sub(4); // 이미 PC는 4 증가했으므로 보정
-                    self.pc = self.pc.wrapping_add(imm as u32);
+                    self.pc = cur_pc.wrapping_add(imm as u32);
                 }
             }
             Instruction::Blt { rs1, rs2, imm } => {
                 if (self.regs.read(rs1) as i32) < (self.regs.read(rs2) as i32) {
-                    self.pc = self.pc.wrapping_sub(4); // 이미 PC는 4 증가했으므로 보정
-                    self.pc = self.pc.wrapping_add(imm as u32);
+                    self.pc = cur_pc.wrapping_add(imm as u32);
                 }
             }
             Instruction::Bge { rs1, rs2, imm } => {
                 if (self.regs.read(rs1) as i32) >= (self.regs.read(rs2) as i32) {
-                    self.pc = self.pc.wrapping_sub(4); // 이미 PC는 4 증가했으므로 보정
-                    self.pc = self.pc.wrapping_add(imm as u32);
+                    self.pc = cur_pc.wrapping_add(imm as u32);
                 }
             }
 
             // I-Type Jump and Link Register (0x67)
             Instruction::Jalr { rd, rs1, imm } => {
                 let target = self.regs.read(rs1).wrapping_add(imm as u32) & !1; // 최하위비트를 0으로 설정
-                let return_address = self.pc; // 이미 PC는 4 증가했으므로 현재 PC를 반환 주소로 사용
+                let return_address = self.pc; // 이미 PC는 4 증가했으므로 PC 레지스터 값을 반환 주소로 사용
 
                 self.regs.write(rd, return_address);
-                self.pc = target - 4; // 이미 PC는 4 증가했으므로 보정
+                self.pc = target;
             }
 
             // 
             Instruction::Jal { rd, imm } => {
-                let target = self.pc.wrapping_add(imm as u32) & !1; // 최하위비트를 0으로 설정
-                let return_address = self.pc; // 이미 PC는 4 증가했으므로 현재 PC를 반환 주소로 사용
+                let target = cur_pc.wrapping_add(imm as u32);
+                let return_address = self.pc; // 이미 PC는 4 증가했으므로 PC 레지스터 값을 반환 주소로 사용
 
                 self.regs.write(rd, return_address);
-                self.pc = target - 4; // 이미 PC는 4 증가했으므로 보정
+                self.pc = target;
             }
 
             Instruction::Unknown(raw) => panic!("Unknown instruction: {:#x}", raw),
