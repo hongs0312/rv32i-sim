@@ -12,6 +12,7 @@ impl RegisterFile {
     }
 
     pub fn write(&mut self, reg: u32, value: u32) {
+        // x0 레지스터는 항상 0이어야 하므로, x0에 쓰기를 시도하면 무시
         if reg != 0 {
             self.regs[reg as usize] = value;
         }

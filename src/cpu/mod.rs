@@ -31,6 +31,7 @@ impl Cpu {
         let inst = decode(raw_inst);
         // println!("Decoded instruction: {:?}", inst);
 
+        // 현재 PC를 저장하여 분기 및 점프 명령어에서 사용할 수 있도록 함
         let cur_pc = self.pc;
 
         // 3. Execute & Write Back
@@ -133,7 +134,7 @@ impl Cpu {
                 self.pc = target;
             }
 
-            // 
+            // U-Type Jump and Link (0x6F)
             Instruction::Jal { rd, imm } => {
                 let target = cur_pc.wrapping_add(imm as u32);
                 let return_address = self.pc; // 이미 PC는 4 증가했으므로 PC 레지스터 값을 반환 주소로 사용
