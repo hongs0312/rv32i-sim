@@ -87,17 +87,17 @@ pub fn decode(inst: u32) -> Instruction {
             // let imm_10_5 = funct7 & 0x3f; // bits 5-10
             // let imm_12 = (funct7 >> 6) & 0x1; // bit 12
             // let imm_11 = rd & 0x1; // bit 11
-            // let imm_4_1 = (rd >> 1) & 0xf; // bits 1-4  
+            // let imm_4_1 = (rd >> 1) & 0xf; // bits 1-4
 
             // let raw_imm =
             //     ((imm_12 << 12) | (imm_11 << 11) | (imm_10_5 << 5) | (imm_4_1 << 1)) as i32;
             // let imm = (raw_imm << 19) >> 19; // Sign-extend the immediate
 
             // B-Type imm 디코딩 예시
-            let imm12   = (inst >> 31) & 0x1;
+            let imm12 = (inst >> 31) & 0x1;
             let imm10_5 = (inst >> 25) & 0x3F;
-            let imm4_1  = (inst >> 8) & 0xF;
-            let imm11   = (inst >> 7) & 0x1;
+            let imm4_1 = (inst >> 8) & 0xF;
+            let imm11 = (inst >> 7) & 0x1;
 
             // Bit 0은 무조건 0이므로 (imm4_1 << 1) 형태로 이미 LSB가 0으로 맞춰집니다.
             let raw_imm = (imm12 << 12) | (imm11 << 11) | (imm10_5 << 5) | (imm4_1 << 1);

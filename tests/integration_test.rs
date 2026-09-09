@@ -2,11 +2,11 @@ use rv32i_sim::bus::Bus;
 use rv32i_sim::cpu::Cpu;
 use rv32i_sim::memory::Dram;
 
-static memory_size: usize = 0x10000; // 64KB 메모리
+static MEMORY_SIZE: usize = 0x1000000; // 64KB 메모리
 
 /// 테스트용 헬퍼 함수: u32 리틀 엔디안 명령어 슬라이스를 DRAM에 메모리 바이트로로드
 fn create_test_cpu(program: &[u32]) -> Cpu {
-    let mut dram = Dram::new(memory_size);
+    let mut dram = Dram::new(MEMORY_SIZE);
 
     // u32 명령어들을 리틀 엔디안 바이트 배열로 바꾸어 메모리에 저장
     for (i, &inst) in program.iter().enumerate() {
@@ -365,7 +365,7 @@ fn test_rv32i_comprehensive_integration() {
 
 #[test]
 fn test_c_program() {
-    let binary_bytes = include_bytes!("../main.bin");
+    let binary_bytes = include_bytes!("../files/main.bin");
 
     let program: Vec<u32> = binary_bytes
         .chunks_exact(4)
@@ -373,7 +373,7 @@ fn test_c_program() {
         .collect();
 
     let mut cpu = create_test_cpu(&program);
-    cpu.regs.write(2, 0x8000); // 스택 포인터 초기화 (x2 = 0x8000)
+    cpu.regs.write(2, 0x1000000); // 스택 포인터 초기화 (x2 = 0x8000)
 
     while (cpu.pc as usize) < program.len() * 4 {
         let current_pc = cpu.pc;

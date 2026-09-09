@@ -336,15 +336,14 @@ impl Cpu {
             //     // Handle fence instruction (for now, just print a message)
             //     println!("Fence instruction at PC: {:#010x}", cur_pc);
             // }
-
             Instruction::Unknown(raw) => panic!("Unknown instruction: {:#x}", raw),
 
             _ => panic!("Unknown instruction: {:?}", inst),
         }
 
-        // println!("PC: {:#010x} | a0(x10): {} | sp(x2): {:#010x} | ra(x1): {:#010x}", 
-        //     cur_pc, 
-        //     self.regs.read(10), 
+        // println!("PC: {:#010x} | a0(x10): {} | sp(x2): {:#010x} | ra(x1): {:#010x}",
+        //     cur_pc,
+        //     self.regs.read(10),
         //     self.regs.read(2),
         //     self.regs.read(1)
         // );

@@ -30,12 +30,6 @@ pub enum Instruction {
     Lbu { rd: u32, rs1: u32, imm: i32 },
     Lhu { rd: u32, rs1: u32, imm: i32 },
 
-    // // I-Type 0x18
-    // Addiw { rd: u32, rs1: u32, imm: i32 },
-    // Slliw { rd: u32, rs1: u32, imm: i32 },
-    // Srliw { rd: u32, rs1: u32, imm: i32 },
-    // Sraiw { rd: u32, rs1: u32, imm: i32 },
-
     // S-Type 0x23
     Sb { rs1: u32, rs2: u32, imm: i32 },
     Sh { rs1: u32, rs2: u32, imm: i32 },
