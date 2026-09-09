@@ -2,9 +2,11 @@ use rv32i_sim::bus::Bus;
 use rv32i_sim::cpu::Cpu;
 use rv32i_sim::memory::Dram;
 
+static memory_size: usize = 0x10000; // 64KB 메모리
+
 /// 테스트용 헬퍼 함수: u32 리틀 엔디안 명령어 슬라이스를 DRAM에 메모리 바이트로로드
 fn create_test_cpu(program: &[u32]) -> Cpu {
-    let mut dram = Dram::new(1024); // 1KB 테스트 메모리
+    let mut dram = Dram::new(memory_size);
 
     // u32 명령어들을 리틀 엔디안 바이트 배열로 바꾸어 메모리에 저장
     for (i, &inst) in program.iter().enumerate() {
@@ -262,4 +264,134 @@ fn test_jal_instruction() {
         "x1 레지스터는 현재 PC + 4 (즉, 4)이어야 합니다."
     );
     assert_eq!(cpu.pc, 8, "JAL 명령어로 인해 PC는 8만큼 증가해야 합니다.");
+}
+
+#[test]
+fn test_rv32i_comprehensive_integration() {
+    // -------------------------------------------------------------------------
+    // RV32I 종합 통합 테스트 프로그램 (주소: 0x00 ~ 0x24)
+    //
+    // [어셈블리 명령어]                      [기계어 (HEX)]
+    // 0x00: addi x1, x0, 10    (x1 = 10)     -> 0x00a00093 (I-Type)
+    // 0x04: sw   x1, 0(x0)     (Mem[0] = 10) -> 0x00102023 (S-Type)
+    // 0x08: lw   x2, 0(x0)     (x2 = 10)     -> 0x00002103 (I-Type)
+    // 0x0C: add  x3, x1, x2    (x3 = 20)     -> 0x002081b3 (R-Type)
+    // 0x10: bne  x1, x3, 8     (PC -> 0x18)  -> 0x00309463 (B-Type: imm=8)
+    // 0x14: addi x3, x0, 99    (스킵됨)      -> 0x06300193 (I-Type)
+    // 0x18: lui  x4, 0x12345   (x4 = 0x12345000) -> 0x12345237 (U-Type)
+    // 0x1C: jal  x5, 8         (x5 = 0x20, PC -> 0x24) -> 0x008002ef (J-Type: imm=8)
+    // 0x20: addi x3, x0, 99    (스킵됨)      -> 0x06300193 (I-Type)
+    // 0x24: sub  x6, x3, x1    (x6 = 10)     -> 0x40118333 (R-Type)
+    // -------------------------------------------------------------------------
+    let program = vec![
+        0x00a00093, // 0x00: addi x1, x0, 10
+        0x00102023, // 0x04: sw   x1, 0(x0)
+        0x00002103, // 0x08: lw   x2, 0(x0)
+        0x002081b3, // 0x0C: add  x3, x1, x2
+        0x00309463, // 0x10: bne  x1, x3, 8  (offset: +8 -> 0x18)
+        0x06300193, // 0x14: addi x3, x0, 99 (Executed set-up if branch fails)
+        0x12345237, // 0x18: lui  x4, 0x12345
+        0x008002ef, // 0x1C: jal  x5, 8      (offset: +8 -> 0x24)
+        0x06300193, // 0x20: addi x3, x0, 99 (Executed set-up if jump fails)
+        0x40118333, // 0x24: sub  x6, x3, x1
+    ];
+
+    let mut cpu = create_test_cpu(&program);
+
+    // 1. ADDI Execution
+    cpu.step();
+    assert_eq!(cpu.regs.read(1), 10, "x1 레지스터는 10이어야 합니다.");
+    assert_eq!(cpu.pc, 4);
+
+    // 2. SW (Store Word) Execution
+    cpu.step();
+    assert_eq!(cpu.pc, 8);
+
+    // 3. LW (Load Word) Execution
+    cpu.step();
+    assert_eq!(
+        cpu.regs.read(2),
+        10,
+        "메모리에서 로드한 x2 값은 10이어야 합니다."
+    );
+    assert_eq!(cpu.pc, 12);
+
+    // 4. ADD Execution
+    cpu.step();
+    assert_eq!(
+        cpu.regs.read(3),
+        20,
+        "x3 레지스터는 x1 + x2 = 20이어야 합니다."
+    );
+    assert_eq!(cpu.pc, 16);
+
+    // 5. BNE (Branch if Not Equal) Execution -> Branch taken (+8)
+    cpu.step();
+    assert_eq!(
+        cpu.pc, 0x18,
+        "x1 != x3이므로 BNE 분기가 발생하여 PC가 0x18로 이동해야 합니다."
+    );
+
+    // 6. LUI Execution
+    cpu.step();
+    assert_eq!(
+        cpu.regs.read(4),
+        0x1234_5000,
+        "x4 레지스터는 상위 20비트가 0x12345인 값이어야 합니다."
+    );
+    assert_eq!(cpu.pc, 0x1C);
+
+    // 7. JAL Execution -> Jump (+8), Save return address
+    cpu.step();
+    assert_eq!(
+        cpu.regs.read(5),
+        0x20,
+        "x5(ra) 레지스터에는 다음 명령어 주소인 0x20이 저장되어야 합니다."
+    );
+    assert_eq!(
+        cpu.pc, 0x24,
+        "JAL 명령어로 인해 PC가 0x24로 점프해야 합니다."
+    );
+
+    // 8. SUB Execution
+    cpu.step();
+    assert_eq!(
+        cpu.regs.read(6),
+        10,
+        "x6 레지스터는 x3(20) - x1(10) = 10이어야 합니다."
+    );
+    assert_eq!(cpu.pc, 0x28);
+}
+
+#[test]
+fn test_c_program() {
+    let binary_bytes = include_bytes!("../main.bin");
+
+    let program: Vec<u32> = binary_bytes
+        .chunks_exact(4)
+        .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
+        .collect();
+
+    let mut cpu = create_test_cpu(&program);
+    cpu.regs.write(2, 0x8000); // 스택 포인터 초기화 (x2 = 0x8000)
+
+    while (cpu.pc as usize) < program.len() * 4 {
+        let current_pc = cpu.pc;
+        let inst = program[(current_pc / 4) as usize];
+
+        // ecall (0x00000073)을 만나면 종료
+        if inst == 0x00000073 {
+            println!("ecall encountered. Halting execution.");
+            break;
+        }
+
+        cpu.step();
+    }
+
+    // 피보나치 결과 55 검증
+    assert_eq!(
+        cpu.regs.read(10),
+        55,
+        "a0(x10) 레지스터의 값이 55이어야 합니다."
+    );
 }
