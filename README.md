@@ -19,3 +19,11 @@ Run C programs directly on the simulator using `cargo run`:
 
 ```bash
 cargo run -- --source <PATH_TO_C_FILE> [OPTIONS]
+```
+
+## Options
+| Option | Long Flag | Description | Default |
+| --- | --- | --- | --- |
+| -s | --source | Path to the target C source file | files/main.c |
+| -v | --verbose |Enable cycle-by-cycle trace log (PC, Inst, sp, a0) | false |
+| -m | --max-steps | Maximum instruction limit to prevent infinite loops | 100000 |
