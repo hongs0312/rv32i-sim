@@ -13,7 +13,7 @@ const RAM_SIZE: usize = 16 * 1024 * 1024; // 16MB
 #[command(author, version, about = "RV32I C-Code Compiler & Simulator")]
 struct Args {
     /// 실행할 C 소스 파일 경로
-    #[arg(short, long, default_value = "main.c")]
+    #[arg(short, long, default_value = "files/main.c")]
     source: String,
 
     /// 한 스텝씩 진행하며 레지스터 상태 출력

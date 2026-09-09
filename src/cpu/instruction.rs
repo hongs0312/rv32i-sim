@@ -62,7 +62,7 @@ pub enum Instruction {
     Rem { rd: u32, rs1: u32, rs2: u32 },
     Remu { rd: u32, rs1: u32, rs2: u32 },
 
-    Ecall,
+    Ecall, // 시스템 호출
     Ebreak,
     Fence,
 
