@@ -29,6 +29,4 @@ cargo run -- --source <PATH_TO_C_FILE> [OPTIONS]
 | -m | --max-steps | Maximum instruction limit to prevent infinite loops | 100000 |
 
 ## Referencing Structure
-<img width="1870" height="1299" alt="제목 없음" src="https://github.com/user-attachments/assets/a03e5bec-72ec-4e32-8ba9-679f64812f8f" />
-
-
+<img width="1870" height="1299" alt="제목 없음" src="https://github.com/user-attachments/assets/5daf37ba-0173-4ff4-bcfb-82ff15a090f0" />
