@@ -28,4 +28,5 @@ cargo run -- --source <PATH_TO_C_FILE> [OPTIONS]
 | -v | --verbose |Enable cycle-by-cycle trace log (PC, Inst, sp, a0) | false |
 | -m | --max-steps | Maximum instruction limit to prevent infinite loops | 100000 |
 
+## Referencing Structure
 <img width="1870" height="1299" alt="image" src="https://github.com/user-attachments/assets/0692b90e-9b48-40c4-9012-a65798b07354" />
