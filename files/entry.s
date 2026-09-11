@@ -3,7 +3,7 @@
 
 _start:
     # 1. 스택 포인터 초기화 (16MB 상단)
-    lui sp, 0x1000
+    lui sp, 0x800
 
     # 2. C main 함수 호출
     call main

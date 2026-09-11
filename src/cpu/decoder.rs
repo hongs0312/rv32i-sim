@@ -57,9 +57,16 @@ pub fn imm_gen(inst: u32) -> i32 {
             let imm_10_1 = (inst >> 21) & 0x3ff; // bits 21~30
             let imm_11 = (inst >> 20) & 0x1; // bit 20
             let imm_19_12 = (inst >> 12) & 0xff; // bits 12~19
-            let imm =
-                ((imm_20 << 20) | (imm_19_12 << 12) | (imm_11 << 11) | (imm_10_1 << 1)) as i32;
-            (imm << 11) >> 11 // Sign-extend to 32 bits
+
+            let raw_imm = (imm_20 << 20) | (imm_19_12 << 12) | (imm_11 << 11) | (imm_10_1 << 1);
+            // Sign Extension (bit 20 기준)
+            let imm = if (raw_imm & 0x0010_0000) != 0 {
+                raw_imm | 0xFFE0_0000
+            } else {
+                raw_imm
+            };
+
+            imm as i32
         }
 
         _ => 0, // 기본값: 0 (알 수 없는 명령어에 대해)
