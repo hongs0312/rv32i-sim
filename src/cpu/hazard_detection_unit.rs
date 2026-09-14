@@ -41,13 +41,6 @@ impl ForwardingUnit {
         // 조건 1: MEM/WB 단계에서 레지스터 쓰기 활성화
         // 조건 2: MEM/WB 단계에서 쓰기 대상 레지스터가 0이 아님
         // 조건 3: MEM/WB 단계에서 쓰기 대상 레지스터가 ID/EX 단계에서 읽는 rs1과 동일
-        // if mem_wb_reg_write && (mem_wb_rd != 0) && (mem_wb_rd == id_ex_rs1) {
-        //     forward_a = ForwardA::ForwardFromWb;
-        // }
-        // if mem_wb_reg_write && (mem_wb_rd != 0) && (mem_wb_rd == id_ex_rs2) {
-        //     forward_b = ForwardB::ForwardFromWb;
-        // }
-
         if mem_wb_reg.control.reg_write && mem_wb_reg.rd != 0 && mem_wb_reg.rd == id_ex_reg.rs1 {
             forward_a = ForwardA::ForwardFromWb;
         }
@@ -85,32 +78,7 @@ impl HazardDetectionUnit {
         // IF 단계에서 명령어를 디코딩하여 rs1, rs2 레지스터를 확인
         let (_, rs2, rs1, _, _, _) = Decoder::decode(if_id_instruction);
 
-        // load-use hazard 발생 여부를 판단하기 위해, IF 단계에서 읽은 명령어가 rs1 또는 rs2를 사용하는지 확인
-
         // load-use hazard 발생 여부를 판단
-        // 조건: EX 단계에서 load 명령어가 수행 중이고, IF 단계에서 읽은 명령어가 EX 단계의 rd 레지스터를 사용하고 있는 경우
         (rs1 == id_ex_rd) || (rs2 == id_ex_rd)
     }
 }
-
-// // IF 단계에서 읽은 명령어가 rs1을 사용하는지 확인
-// fn check_if_instruction_uses_rs1(opcode: u8) -> bool {
-//     match opcode {
-//         0x33 => true, // R-Type
-//         0x13 => true, // I-Type (Immediate ALU)
-//         0x03 => true, // I-Type (Load)
-//         0x67 => true, // I-Type (JALR)
-//         0x23 => true, // S-Type (Store)
-//         0x63 => true, // B-Type (Branch)
-//         _ => false,
-//     }
-// }
-
-// fn check_if_instruction_uses_rs2(opcode: u8) -> bool {
-//     match opcode {
-//         0x33 => true, // R-Type
-//         0x23 => true, // S-Type (Store)
-//         0x63 => true, // B-Type (Branch)
-//         _ => false,
-//     }
-// }
