@@ -43,14 +43,6 @@ impl Default for IfIdRegister {
         }
     }
 }
-impl IfIdRegister {
-    pub fn flush(&mut self) {
-        *self = Self {
-            pc: 0,
-            instruction: 0x00000013, // NOP 명령어로 초기화
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IdExRegister {
@@ -81,20 +73,6 @@ impl Default for IdExRegister {
         }
     }
 }
-impl IdExRegister {
-    pub fn flush(&mut self) {
-        *self = Self {
-            control: ControlSignals::default(),
-            pc: 0,
-            rd: 0,
-            rs1: 0,
-            rs2: 0,
-            rs1_data: 0,
-            rs2_data: 0,
-            imm: 0,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ExMemRegister {
@@ -107,18 +85,6 @@ pub struct ExMemRegister {
 
     pub rd: u8,
     pub rs2_data: u32,
-}
-impl ExMemRegister {
-    pub fn flush(&mut self) {
-        *self = Self {
-            control: ControlSignals::default(),
-            target_pc: 0,
-            zero: false,
-            alu_result: 0,
-            rd: 0,
-            rs2_data: 0,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
