@@ -142,6 +142,9 @@ impl Cpu {
 
         // 6. MEM/WB 레지스터 업데이트
         self.mem_wb_reg = next_mem_wb_reg;
+
+        println!("regs: {:?}", self.regs);
+        println!();
     }
 
     fn execute(&mut self, id_ex_reg: IdExRegister) -> ExMemRegister {
