@@ -5,17 +5,17 @@ impl Decoder {
         Decoder
     }
 
-    pub fn decode(inst: u32) -> (u32, u32, u32, u32, u32, u32) {
+    pub fn decode(inst: u32) -> (u8, u8, u8, u8, u8, u8) {
         // Decode the opcode
         // 0000 0000 0000 0000 0000 0000 0000 0000
         // 31 <- 0순으로 인덱싱
 
-        let opcode = inst & 0x7f; // 0~6 bits
-        let rd = ((inst >> 7) & 0x1f) as u32; // 7~11 bits
-        let funct3 = (inst >> 12) & 0x7; // 12~14 bits
-        let rs1 = ((inst >> 15) & 0x1f) as u32; // 15~19 bits
-        let rs2 = ((inst >> 20) & 0x1f) as u32; // 20~24 bits
-        let funct7 = (inst >> 25) & 0x7f; // 25~31 bits
+        let opcode = (inst & 0x7f) as u8; // 0~6 bits
+        let rd = ((inst >> 7) & 0x1f) as u8; // 7~11 bits
+        let funct3 = ((inst >> 12) & 0x7) as u8; // 12~14 bits
+        let rs1 = ((inst >> 15) & 0x1f) as u8; // 15~19 bits
+        let rs2 = ((inst >> 20) & 0x1f) as u8; // 20~24 bits
+        let funct7 = ((inst >> 25) & 0x7f) as u8; // 25~31 bits
 
         // core instruction format에 따라 변환
         (funct7, rs2, rs1, funct3, rd, opcode)
@@ -28,6 +28,7 @@ pub fn imm_gen(inst: u32) -> i32 {
         0x03 | 0x13 | 0x67 => {
             // I-Type
             let imm = (inst as i32) >> 20; // Sign-extend the immediate
+            
             imm
         }
         0x23 => {

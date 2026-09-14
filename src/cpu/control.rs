@@ -1,91 +1,143 @@
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ControlSignals {
-    // Execution 제어 신호
-    pub alu_src: bool, // 1bit: ALU 두 번째 입력 선택
-    pub alu_op: u8,    // 2-bit: Main Control이 ALU Control로 넘기는 힌트 신호 (00, 01, 10 등)
-    pub jal: bool,        // 1bit: JAL 명령어 여부
-    pub jalr: bool,       // 1bit: JALR 명령어 여부
+    pub opcode: u8,
+    pub funct3: u8,
+    pub funct7: u8,
 
-    // Memory 제어 신호
-    pub branch: bool,    // 1bit: Branch 명령어 여부
-    pub mem_read: bool,  // 1bit: 메모리 읽기 활성화 (lw 등)
-    pub mem_write: bool, // 1bit: 메모리 쓰기 활성화 (sw 등)
+    // Execution 제어
+    pub alu_src_a: bool, // false: rs1, true: PC (AUIPC, JAL 등에서 필요)
+    pub alu_src_b: bool, // false: rs2, true: Immediate
+    pub alu_op: u8,      // ALU Main Opcode
 
-    // Write Back 제어 신호
-    pub reg_write: bool,  // 1bit: 레지스터file 쓰기 활성화
-    pub mem_to_reg: bool, // 1bit: register에 쓸 값 선택 (0: ALU 결과 vs 1: Memory 읽기 값)
+    // Branch & Jump 제어 (jal/jalr 통합)
+    pub branch: bool,  // Conditional Branch (BEQ, BNE 등)
+    pub jump: bool,    // Unconditional Jump (JAL, JALR 통합!)
+    pub is_jalr: bool, // JALR 특화 (Base가 PC가 아닌 rs1임을 구분)
 
-    // System 제어 신호
-    pub is_ecall: bool, // 1bit: ECALL 명령어 여부
+    // Memory 제어
+    pub mem_read: bool,
+    pub mem_write: bool,
+
+    // Write Back 제어 (3-to-1 MUX 제어로 변경)
+    pub reg_write: bool,
+    pub wb_src: bool, // false: ALU Output, true: Memory
+
+    // System
+    pub is_ecall: bool,
 }
 
-// Control 신호를 opcode에 따라 설정하는 함수
-pub fn get_control_signals(opcode: u32) -> ControlSignals {
+impl Default for ControlSignals {
+    fn default() -> Self {
+        Self {
+            opcode: 0x13,
+            funct3: 0x0,
+            funct7: 0x00,
+
+            alu_src_a: false, // rs1 기본
+            alu_src_b: true,  // Imm 기본 (ADDI)
+            alu_op: 0b11,     // I-Type ALU
+
+            branch: false,
+            jump: false,
+            is_jalr: false,
+
+            mem_read: false,
+            mem_write: false,
+
+            reg_write: false, // NOP일 때 Safe
+            wb_src: false,        // ALU 결과 기본
+
+            is_ecall: false,
+        }
+    }
+}
+
+pub fn get_control_signals(opcode: u8, funct3: u8, funct7: u8) -> ControlSignals {
     let mut control = ControlSignals::default();
 
+    control.opcode = opcode;
+    control.funct3 = funct3;
+    control.funct7 = funct7;
+
     match opcode {
-        0x00 => {} // NOP (No Operation)
         0x37 => {
-            // U-Type (LUI)
-            control.alu_src = true; // ALU 두 번째 입력은 immediate
-            control.alu_op = 0b10; // ALU는 ADD 연산 수행
-            control.reg_write = true; // 레지스터file 쓰기 활성화
+            // LUI
+            control.alu_src_b = true;
+            control.alu_op = 0b100; // LUI Pass-through
+            control.reg_write = true;
+            control.wb_src = false;
         }
         0x17 => {
-            // U-Type (AUIPC)
-            control.alu_src = true; // ALU 두 번째 입력은 immediate
-            control.alu_op = 0b10; // ALU는 ADD 연산 수행
-            control.reg_write = true; // 레지스터file 쓰기 활성화
+            // AUIPC
+            control.alu_src_a = true; // PC 선택!
+            control.alu_src_b = true; // Imm 선택
+            control.alu_op = 0b00; // ADD 수행 (PC + Imm)
+            control.reg_write = true;
+            control.wb_src = false;
         }
         0x33 => {
             // R-Type
-            control.alu_src = false;
+            control.alu_src_a = false;
+            control.alu_src_b = false;
             control.alu_op = 0b10;
             control.reg_write = true;
+            control.wb_src = false;
         }
         0x13 => {
-            // I-Type (Immediate ALU)
-            control.alu_src = true;
-            control.alu_op = 0b10;
+            // I-Type ALU
+            control.alu_src_a = false;
+            control.alu_src_b = true;
+            control.alu_op = 0b11;
             control.reg_write = true;
+            control.wb_src = false;
         }
         0x03 => {
-            // I-Type (Load)
-            control.alu_src = true;
-            control.alu_op = 0b00; // ALU는 주소 계산만 수행
-            control.mem_read = true; // 메모리 읽기 활성화
-            control.reg_write = true; // 레지스터file 쓰기 활성화
-            control.mem_to_reg = true; // 메모리 읽기 값 선택
+            // Load
+            control.alu_src_a = false;
+            control.alu_src_b = true;
+            control.alu_op = 0b00; // ADD (Addr = rs1 + Imm)
+            control.mem_read = true;
+            control.reg_write = true;
+            control.wb_src = true; // Memory 읽기 값 선택
         }
         0x23 => {
-            // S-Type (Store)
-            control.alu_src = true; // ALU 두 번째 입력은 immediate
-            control.alu_op = 0b00; // ALU는 주소 계산만 수행
-            control.mem_write = true; // 메모리 쓰기 활성화
+            // Store
+            control.alu_src_a = false;
+            control.alu_src_b = true;
+            control.alu_op = 0b00; // ADD (Addr = rs1 + Imm)
+            control.mem_write = true;
         }
         0x63 => {
-            // B-Type (Branch)
-            control.alu_src = false; // ALU 두 번째 입력은 register
-            control.alu_op = 0b01; // ALU는 비교 연산 수행
-            control.branch = true; // Branch 명령어 활성화
+            // Branch
+            control.alu_src_a = false;
+            control.alu_src_b = false;
+            control.alu_op = 0b01; // Branch Compare
+            control.branch = true;
         }
-        0x6F | 0x67 => {
-            // J-Type (JAL, JALR)
-            control.alu_src = true; // ALU 두 번째 입력은 immediate
-            control.alu_op = 0b00; // ALU는 주소 계산만 수행
-            control.reg_write = true; // 레지스터file 쓰기 활성화
-            if opcode == 0x6F {
-                control.jal = true; // JAL 명령어 활성화
-            } else {
-                control.jalr = true; // JALR 명령어 활성화
-            }
+        0x6F => {
+            // JAL
+            control.alu_src_a = true; // PC 선택
+            control.alu_src_b = true; // Imm 선택 (Target = PC + Imm)
+            control.alu_op = 0b00; // ADD
+            control.jump = true; // JAL/JALR 공통 Jump 신호
+            control.reg_write = true;
+            control.wb_src = false; // PC + 4 선택!
+        }
+        0x67 => {
+            // JALR
+            control.alu_src_a = false; // rs1 선택! (Target = rs1 + Imm)
+            control.alu_src_b = true; // Imm 선택
+            control.alu_op = 0b00; // ADD
+            control.jump = true; // JAL/JALR 공통 Jump 신호
+            control.is_jalr = true; // LSB Masking(0bit Clear) 처리를 위해 표시
+            control.reg_write = true;
+            control.wb_src = false; // PC + 4 선택!
         }
         0x73 => {
-            // System (ECALL, EBREAK)
-            control.is_ecall = true; // ECALL 명령어 활성화
+            // System
+            control.is_ecall = true;
         }
-
-        _ => panic!("Unsupported opcode: {:#x}", opcode),
+        _ => {}
     }
 
     control

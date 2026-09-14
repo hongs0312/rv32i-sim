@@ -1,19 +1,34 @@
+/*
+    CPU 모듈
+    - CPU는 5단계 파이프라인 구조를 가지며, 각 단계는 별도의 레지스터를 사용하여 데이터를 전달함
+*/
+
 pub mod alu;
+pub mod branch;
 pub mod control;
 pub mod decoder;
+pub mod hazard_detection_unit;
 pub mod register;
 
-use crate::bus::Bus;
-
+// cpu를 이루는 모듈
 use crate::cpu::alu::*;
+use crate::cpu::branch::*;
 use crate::cpu::control::*;
 use crate::cpu::decoder::*;
 use crate::cpu::register::*;
+
+// Hazard Detection Unit 모듈
+use crate::cpu::hazard_detection_unit::*;
+
+// Memory Bus 모듈
+use crate::bus::Bus;
 
 pub struct Cpu {
     pub pc: u32,
     pub regs: RegisterFile,
     pub alu: Alu,
+
+    /// CPU가 접근할 수 있는 메모리 인터페이스
     pub bus: Bus,
 
     pub branch_taken: bool,
@@ -41,156 +56,217 @@ impl Cpu {
         }
     }
 
-    // CPU의 한 사이클을 수행하는 메서드
-    // 파이프라이닝을 구현하기 위해서 역순으로 각 단계의 레지스터를 업데이트
-    pub fn step(&mut self) {
-        // 각 단계의 레지스터를 업데이트
-        let next_if_id_reg = self.instruction_fetch();
-        let next_id_ex_reg = self.instruction_decode(self.if_id_reg.clone());
-        let next_ex_mem_reg = self.execute(self.id_ex_reg.clone());
-        let next_mem_wb_reg = self.memory_access(self.ex_mem_reg.clone());
+    // 싱글사이클로 CPU를 실행하는 메서드
+    pub fn single_cycle_step(&mut self) {
+        // 1. Instruction Fetch
+        self.if_id_reg = self.instruction_fetch();
+
+        // 2. Instruction Decode
+        self.id_ex_reg = self.instruction_decode(self.if_id_reg.clone());
+
+        // 3. Execute
+        self.ex_mem_reg = self.execute(self.id_ex_reg.clone());
+
+        // 4. Memory Access
+        self.mem_wb_reg = self.memory_access(self.ex_mem_reg.clone());
+
+        // 5. Write Back
         self.write_back(self.mem_wb_reg.clone());
 
-        if self.branch_taken {
-            // Branch가 taken되었으면 IF/ID와 ID/EX 레지스터를 초기화
+        let branch_taken = self.ex_mem_reg.control.branch
+            && get_branch_condition(
+                self.ex_mem_reg.alu_result,
+                self.ex_mem_reg.zero,
+                self.ex_mem_reg.control.funct3,
+            );
+        let pcsrc = self.ex_mem_reg.control.jump || branch_taken;
+        let branch_target = self.ex_mem_reg.target_pc;
+
+        self.update_pc(branch_target, pcsrc);
+
+        println!("regs: {:?}", self.regs);
+        println!();
+    }
+
+    // CPU의 한 사이클을 수행하는 메서드
+    // 파이프라이닝을 구현하기 위해서 역순으로 각 단계의 레지스터를 업데이트
+    pub fn pipeline_step(&mut self) {
+        // 1. WB 및 MEM 단계 실행 (역순)
+        self.write_back(self.mem_wb_reg.clone());
+        let next_mem_wb_reg = self.memory_access(self.ex_mem_reg.clone());
+
+        // 2. EX 단계 실행
+        let next_ex_mem_reg = self.execute(self.id_ex_reg.clone());
+
+        // 3. EX 단계의 연산 결과(next_ex_mem_reg)를 기반으로 Branch/Jump 판정
+        let branch_taken = next_ex_mem_reg.control.branch
+            && get_branch_condition(
+                next_ex_mem_reg.alu_result,
+                next_ex_mem_reg.zero,
+                next_ex_mem_reg.control.funct3,
+            );
+        let pcsrc = next_ex_mem_reg.control.jump || branch_taken;
+        let branch_target = next_ex_mem_reg.target_pc;
+
+        // 4. Load-Use Hazard Detection
+        let is_stall = HazardDetectionUnit::check_load_use(
+            self.id_ex_reg.control.mem_read,
+            self.id_ex_reg.rd,
+            self.if_id_reg.instruction,
+        );
+
+        // 5. 제어 흐름 업데이트 (Flush > Stall > Normal)
+        if pcsrc {
+            // Branch/Jump Taken: Target PC로 업데이트 후 선행 파이프라인(IF/ID, ID/EX) Flush
+            self.update_pc(branch_target, true);
+
             self.if_id_reg = IfIdRegister::default();
             self.id_ex_reg = IdExRegister::default();
-            self.ex_mem_reg = ExMemRegister::default();
-
-            self.branch_taken = false; // Reset branch_taken flag
+            // next_ex_mem_reg(점프/분기 명령어 본체)는 WB까지 전진하여 레지스터 쓰기 수행
+            self.ex_mem_reg = next_ex_mem_reg;
+        } else if is_stall {
+            // Load-Use Hazard: ID/EX에 NOP(Bubble) 삽입, IF/ID 및 PC는 동결
+            self.id_ex_reg = IdExRegister::default();
+            self.ex_mem_reg = next_ex_mem_reg;
         } else {
-            // Branch가 taken되지 않았으면 다음 단계의 레지스터로 업데이트
+            // 정상 진행
+            let next_id_ex_reg = self.instruction_decode(self.if_id_reg.clone());
+            let next_if_id_reg = self.instruction_fetch();
+
+            self.update_pc(branch_target, false);
+
             self.if_id_reg = next_if_id_reg;
             self.id_ex_reg = next_id_ex_reg;
             self.ex_mem_reg = next_ex_mem_reg;
         }
-        
+
+        // 6. MEM/WB 레지스터 업데이트
         self.mem_wb_reg = next_mem_wb_reg;
     }
 
-    fn instruction_fetch(&mut self) -> IfIdRegister {
-        let cur_pc = self.pc;
-
-        // Branch가 taken되지 않았으면 PC를 4 증가시켜 다음 명령어로 이동
-        if !self.branch_taken {
-            self.pc += 4;
-        }
-
-        let instruction = self.bus.load32(cur_pc).expect("Fetch failed");
-
-        // 결과를 if_id_reg에 보내서 다음 단계에서 사용할 수 있도록 함
-        IfIdRegister {
-            pc: cur_pc,
-            instruction: instruction,
-        }
-    }
-
-    fn instruction_decode(&mut self, if_id_reg: IfIdRegister) -> IdExRegister {
-        let (pc, instruction) = (if_id_reg.pc, if_id_reg.instruction);
-
-        // 디코더를 사용해 instruction을 분해하여 각 필드를 추출
-        let (funct7, rs2, rs1, funct3, rd, opcode) = Decoder::decode(instruction);
-
-        // register file에서 rs1, rs2에 해당하는 값을 읽어옴
-        let rs1_data = self.regs.read(rs1);
-        let rs2_data = self.regs.read(rs2);
-
-        let imm = imm_gen(instruction); // immediate 값 생성
-
-        // Control Signals 생성
-        let control = get_control_signals(opcode);
-
-        // 결과를 id_ex_reg에 보내서 다음 단계에서 사용할 수 있도록 함
-        IdExRegister {
-            control,
-            pc,
-            rd,
-            rs1_data,
-            rs2_data,
-            funct3,
-            funct7,
-            imm,
-        }
-    }
-
     fn execute(&mut self, id_ex_reg: IdExRegister) -> ExMemRegister {
-        let (control, pc, rd, rs1_data, rs2_data, funct3, funct7, imm) = (
+        // 인자로 전달받은 id_ex_reg 참조
+        let (forward_a, forward_b) =
+            ForwardingUnit::get_forward_signals(&id_ex_reg, &self.ex_mem_reg, &self.mem_wb_reg);
+
+        let (control, pc, rd, rs1_data, rs2_data, imm) = (
             id_ex_reg.control,
             id_ex_reg.pc,
             id_ex_reg.rd,
             id_ex_reg.rs1_data,
             id_ex_reg.rs2_data,
-            id_ex_reg.funct3,
-            id_ex_reg.funct7,
             id_ex_reg.imm,
         );
+        let (funct3, funct7) = (control.funct3, control.funct7);
 
-        // ALU 연산을 수행하기 위해 ALU 입력값 결정
-        let a = rs1_data;
-        let b = if control.alu_src {
-            imm as u32 // immediate 값 사용
-        } else {
-            rs2_data // register 값 사용
+        let rs1_data_forwarded = match forward_a {
+            ForwardA::NoForward => rs1_data,
+            ForwardA::ForwardFromMem => self.ex_mem_reg.alu_result,
+            ForwardA::ForwardFromWb => match self.mem_wb_reg.control.wb_src {
+                true => self.mem_wb_reg.mem_data,
+                false => self.mem_wb_reg.alu_result,
+            },
         };
 
-        let raw_alu_result = self.alu.get_alu_result(a, b, control.alu_op, funct3, funct7);
-
-        let zero = raw_alu_result == 0; // ALU 결과가 0인지 여부를 판단
-        
-        // ALU 연산 수행
-        let alu_result = match control.jal || control.jalr {
-            true => pc.wrapping_add(4), // JAL/JALR 명령어의 경우, ALU 결과는 PC + 4
-            false => raw_alu_result, // 그 외의 경우, ALU 결과 그대로 사용
+        let rs2_data_forwarded = match forward_b {
+            ForwardB::NoForward => rs2_data,
+            ForwardB::ForwardFromMem => self.ex_mem_reg.alu_result,
+            ForwardB::ForwardFromWb => match self.mem_wb_reg.control.wb_src {
+                true => self.mem_wb_reg.mem_data,
+                false => self.mem_wb_reg.alu_result,
+            },
         };
 
-        // Branch target PC 계산
-        let target_pc = match control.jalr {
-            true => (rs1_data.wrapping_add(imm as u32)) & !1, // JALR 명령어의 경우, target PC를 rs1 + imm로 설정하고 하위 1비트를 0으로 설정
-            false => pc.wrapping_add(imm as u32), // Branch 명령어의 경우, target PC를 pc + imm로 설정
+        let a = match control.alu_src_a {
+            true => pc,
+            false => rs1_data_forwarded,
+        };
+        let b = match control.alu_src_b {
+            true => imm as u32,
+            false => rs2_data_forwarded,
         };
 
-        // 결과를 ex_mem_reg에 보내서 다음 단계에서 사용할 수 있도록 함
+        let (raw_alu_result, zero) = self
+            .alu
+            .get_alu_result(a, b, control.alu_op, funct3, funct7);
+
+        let target_pc = match control.is_jalr {
+            true => raw_alu_result & !1,
+            false => pc.wrapping_add(imm as u32),
+        };
+
+        let alu_result = match control.jump {
+            true => pc.wrapping_add(4),
+            false => raw_alu_result,
+        };
+
         ExMemRegister {
             control,
             target_pc,
             zero,
             alu_result,
             rd,
+            rs2_data: rs2_data_forwarded,
+        }
+    }
+
+    fn update_pc(&mut self, branch_target: u32, pcsrc: bool) {
+        let next_pc = self.pc.wrapping_add(4);
+        self.pc = if pcsrc { branch_target } else { next_pc };
+    }
+
+    fn instruction_fetch(&mut self) -> IfIdRegister {
+        let cur_pc = self.pc;
+        let instruction = self.bus.load32(self.pc).expect("Fetch failed");
+        IfIdRegister {
+            pc: cur_pc,
+            instruction,
+        }
+    }
+
+    fn instruction_decode(&mut self, if_id_reg: IfIdRegister) -> IdExRegister {
+        let (pc, instruction) = (if_id_reg.pc, if_id_reg.instruction);
+        let (funct7, rs2, rs1, funct3, rd, opcode) = Decoder::decode(instruction);
+
+        let rs1_data = self.regs.read(rs1);
+        let rs2_data = self.regs.read(rs2);
+        let imm = imm_gen(instruction);
+        let control = get_control_signals(opcode, funct3, funct7);
+
+        IdExRegister {
+            control,
+            pc,
+            rd,
+            rs1,
+            rs2,
+            rs1_data,
             rs2_data,
+            imm,
         }
     }
 
     fn memory_access(&mut self, ex_mem_reg: ExMemRegister) -> MemWbRegister {
-        let (control, target_pc, zero, alu_result, rd, rs2_data) = (
+        let (control, alu_result, rd, rs2_data) = (
             ex_mem_reg.control,
-            ex_mem_reg.target_pc,
-            ex_mem_reg.zero,
             ex_mem_reg.alu_result,
             ex_mem_reg.rd,
             ex_mem_reg.rs2_data,
         );
-
-        let is_jump_taken = (zero && control.branch) || control.jal || control.jalr;
-
-        if is_jump_taken {
-            self.pc = target_pc; // Branch가 taken되었으면 PC를 target PC로 설정
-            self.branch_taken = true; // Branch가 taken되었음을 표시
-        }
+        let funct3 = control.funct3;
 
         let mem_data = if control.mem_read {
-            // Load 명령어 처리
-            self.bus.load32(alu_result).expect("Memory read failed")
-        } else if control.mem_write {
-            // Store 명령어 처리
             self.bus
-                .store32(alu_result, rs2_data)
+                .load(alu_result, funct3)
+                .expect("Memory read failed")
+        } else if control.mem_write {
+            self.bus
+                .store(alu_result, funct3, rs2_data)
                 .expect("Memory write failed");
-            0 // Store 명령어는 읽은 값이 없으므로 0 반환
+            0
         } else {
-            0 // 메모리 접근이 없는 경우 0 반환
+            0
         };
 
-        // 결과를 mem_wb_reg에 보내서 다음 단계에서 사용할 수 있도록 함
         MemWbRegister {
             control,
             alu_result,
@@ -208,11 +284,10 @@ impl Cpu {
         );
 
         if control.reg_write {
-            let write_data = match control.mem_to_reg {
-                true => mem_data,    // 메모리 읽기 값 선택
-                false => alu_result, // ALU 결과 선택
+            let write_data = match control.wb_src {
+                false => alu_result,
+                true => mem_data,
             };
-            
             self.regs.write(rd, write_data, true);
         }
     }
