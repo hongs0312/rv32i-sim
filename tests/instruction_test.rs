@@ -25,6 +25,14 @@ fn setup_cpu(program: &[u32]) -> Cpu {
     cpu
 }
 
+fn single_cycle_step(cpu: &mut Cpu) {
+    cpu.pipeline_step(false); // NOP 주입 없이 파이프라인 단계 진행
+
+    for _ in 0..4 {
+        cpu.pipeline_step(true); // NOP 주입하여 파이프라인 단계 진행
+    }
+}
+
 // fn instruction_test_reference() {
 //     // R-Type 명령어 테스트를 위한 간단한 프로그램
 //     let program = vec![
@@ -36,13 +44,13 @@ fn setup_cpu(program: &[u32]) -> Cpu {
 
 //     let mut cpu = setup_cpu(&program);
 
-//     cpu.single_cycle_step();
+//     single_cycle_step(&mut cpu);
 //     assert_eq!(cpu.regs.read(1), 10); // x1 = 10
 
-//     cpu.single_cycle_step();
+//     single_cycle_step(&mut cpu);
 //     assert_eq!(cpu.regs.read(2) as i32, -4); // x2 = -4 (0xFFFFFFFC)
 
-//     cpu.single_cycle_step();
+//     single_cycle_step(&mut cpu);
 //     assert_eq!(cpu.regs.read(3), 2); // x3 = 2
 // }
 
@@ -78,69 +86,69 @@ fn r_type_instruction_test() {
 
     let mut cpu = setup_cpu(&program);
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(1), 10); // x1 = 10
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(2) as i32, -4); // x2 = -4 (0xFFFFFFFC)
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(3), 2); // x3 = 2
 
     // --- [RV32I R-Type (10종)] ---
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(4), 6); // ADD: x1 + x2 = 10 + (-4) = 6
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(5), 8); // SUB: x1 - x3 = 10 - 2 = 8
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(6), 40); // SLL: x1 << x3 = 10 << 2 = 40 (0x28)
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(7), 1); // SLT: x2 < x1 (signed) -> -4 < 10 -> 1
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(8), 0); // SLTU: x2 < x1 (unsigned) -> 0xFFFFFFFC < 10 -> 0
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(9), 8); // XOR: x1 ^ x3 = 10 ^ 2 = 8
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(10), 0x3FFFFFFF); // SRL: x2 >> x3 (logical) -> 0xFFFFFFFC >> 2
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(11), 0xFFFFFFFF); // SRA: x2 >> x3 (arithmetic) -> -4 >> 2 = -1
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(12), 10); // OR: x1 | x3 = 10 | 2 = 10
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(13), 2); // AND: x1 & x3 = 10 & 2 = 2
 
     // --- [RV32M R-Type (8종)] ---
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(14), 0xFFFFFFD8); // MUL: x1 * x2 = 10 * (-4) = -40 (0xFFFFFFD8)
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(15), 0xFFFFFFFF); // MULH: High 32-bit of signed (10 * -4) = -1
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(16), 9); // MULHSU: High 32-bit of signed 10 * unsigned 0xFFFFFFFC = 9
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(17), 9); // MULHU: High 32-bit of unsigned 10 * unsigned 0xFFFFFFFC = 9
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(18), 0xFFFFFFFE); // DIV: x2 / x3 (signed) = -4 / 2 = -2 (0xFFFFFFFE)
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(19), 0x7FFFFFFE); // DIVU: x2 / x3 (unsigned) = 0xFFFFFFFC / 2 = 0x7FFFFFFE
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(20), 0); // REM: x1 % x3 (signed) = 10 % 2 = 0
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(21), 0); // REMU: x2 % x3 (unsigned) = 0xFFFFFFFC % 2 = 0
 }
 
@@ -175,68 +183,68 @@ fn i_type_instruction_test() {
     let mut cpu = setup_cpu(&program);
 
     // --- [1. ALU Immediate 연산 검증] ---
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(1), 10); // ADDI: x1 = 10
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(2), 6); // ADDI: x2 = 10 + (-4) = 6
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(3), 1); // SLTI: 0 < 1 -> 1
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(4), 1); // SLTIU: 6 < 0xFFFFFFFF (unsigned) -> 1
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(5), 3); // XORI: 0 ^ 3 = 3
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(6), 15); // ORI: 6 | 15 = 15
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(7), 3); // ANDI: 15 & 3 = 3
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(8), 24); // SLLI: 6 << 2 = 24
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(9), 3); // SRLI: 6 >> 1 logical = 3
 
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(9), 3); // SRLI: 6 >> 1 = 3
 
     // --- [2. Memory Load 연산 검증] ---
     // 테스트용 데이터 미리 메모리에 주입 (Little-Endian: 0x87654321)
     let _ = cpu.bus.store(0x100, 0x2, 0x87654321);
 
-    cpu.single_cycle_step(); // ADDI x11 (주소 설정)
+    single_cycle_step(&mut cpu); // ADDI x11 (주소 설정)
     assert_eq!(cpu.regs.read(11), 0x100);
 
-    cpu.single_cycle_step(); // LB
+    single_cycle_step(&mut cpu); // LB
     assert_eq!(cpu.regs.read(12), 0x21);
 
-    cpu.single_cycle_step(); // LBU
+    single_cycle_step(&mut cpu); // LBU
     assert_eq!(cpu.regs.read(13), 0x43);
 
-    cpu.single_cycle_step(); // LH
+    single_cycle_step(&mut cpu); // LH
     assert_eq!(cpu.regs.read(14), 0x4321);
 
     // 음수 부호 확장(Sign-Extension) 테스트를 위한 데이터 배치
     let _ = cpu.bus.store(0x100, 0x1, 0x0080);
 
-    cpu.single_cycle_step(); // LHU (Zero-Extension)
+    single_cycle_step(&mut cpu); // LHU (Zero-Extension)
     assert_eq!(cpu.regs.read(15), 0x00000080);
 
     let _ = cpu.bus.store(0x100, 0x2, 0x87654321); // 원래 값 복구
 
-    cpu.single_cycle_step(); // LW
+    single_cycle_step(&mut cpu); // LW
     assert_eq!(cpu.regs.read(16), 0x87654321);
 
     // --- [3. JALR 연산 검증] ---
     let current_pc = cpu.pc;
-    cpu.single_cycle_step(); // ADDI x17
+    single_cycle_step(&mut cpu); // ADDI x17
 
-    cpu.single_cycle_step(); // JALR
+    single_cycle_step(&mut cpu); // JALR
     assert_eq!(cpu.regs.read(18), current_pc + 8); // Return Address (Next PC) 저장 확인
     assert_eq!(cpu.pc, 12); // Target PC = (x17 + imm) & !1 = (8 + 4) = 12
 }
@@ -258,28 +266,28 @@ fn s_type_instruction_test() {
     let mut cpu = setup_cpu(&program);
 
     // 1. 초기화 단계 실행 (3 cycle)
-    cpu.single_cycle_step(); // x1 = 0x100
-    cpu.single_cycle_step(); // x2 = 128
-    cpu.single_cycle_step(); // x3 = -4
+    single_cycle_step(&mut cpu); // x1 = 0x100
+    single_cycle_step(&mut cpu); // x2 = 128
+    single_cycle_step(&mut cpu); // x3 = -4
 
     assert_eq!(cpu.regs.read(1), 0x100);
     assert_eq!(cpu.regs.read(2), 128);
     assert_eq!(cpu.regs.read(3) as i32, -4);
 
     // 2. SB (Store Byte) 검증
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     // 0x100 주소에서 1바이트 읽기 (0x80)
     let byte_val = cpu.bus.load(0x100, 0x0).unwrap() as u8;
     assert_eq!(byte_val, 0x80);
 
     // 3. SH (Store Halfword) 검증
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     // 0x104 주소에서 2바이트(Halfword) 읽기 (0xFFFC)
     let half_val = cpu.bus.load(0x104, 0x1).unwrap() as u16;
     assert_eq!(half_val, 0xFFFC);
 
     // 4. SW (Store Word) 검증
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     // 0x110 주소에서 4바이트(Word) 읽기 (128)
     let word_val = cpu.bus.load(0x110, 0x2).unwrap();
     assert_eq!(word_val, 128);
@@ -308,29 +316,29 @@ fn b_type_instruction_test() {
     let mut cpu = setup_cpu(&program);
 
     // 1. 레지스터 초기화 (3 cycle)
-    cpu.single_cycle_step(); // PC: 0x04, x1 = 5
-    cpu.single_cycle_step(); // PC: 0x08, x2 = 5
-    cpu.single_cycle_step(); // PC: 0x0C, x3 = 10
+    single_cycle_step(&mut cpu); // PC: 0x04, x1 = 5
+    single_cycle_step(&mut cpu); // PC: 0x08, x2 = 5
+    single_cycle_step(&mut cpu); // PC: 0x0C, x3 = 10
 
     // 2. BEQ 실행 (Branch Taken)
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
 
     // BEQ 조건 성립으로 0x10(ADDI x4)을 건너뛰고 Target PC(0x14)로 이동했는지 검증
     assert_eq!(cpu.pc, 0x14);
     assert_eq!(cpu.regs.read(4), 0); // x4는 실행되지 않아 0이어야 함
 
     // 3. Target 주소(0x14) 명령어 실행
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(5), 1);
     assert_eq!(cpu.pc, 0x18);
 
     // 4. BLT 실행 (Branch Not Taken)
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     // 조건 불성립이므로 PC가 0x20으로 점프하지 않고 PC + 4 (0x1C)로 진행해야 함
     assert_eq!(cpu.pc, 0x1C);
 
     // 5. Fall-through 명령어(0x1C) 정상 실행 검증
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(6), 2);
 }
 
@@ -350,15 +358,15 @@ fn u_type_instruction_test() {
     let mut cpu = setup_cpu(&program);
 
     // 1. LUI (Load Upper Immediate) 테스트
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(1), 0x1234_5000);
 
     // 2. AUIPC (Add Upper Immediate to PC) 테스트
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(2), 0x0000_2004);
 
     // 3. LUI + ADDI 조합으로 32비트 풀 상수가 잘 만들어지는지 테스트
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(3), 0x1234_5678);
 }
 
@@ -381,21 +389,21 @@ fn j_type_instruction_test() {
     let mut cpu = setup_cpu(&program);
 
     // 1. JAL 실행 (0x00 -> 0x08로 오프셋 점프)
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(1), 0x0000_0004); // x1에 복귀 주소 PC+4 저장 확인
     assert_eq!(cpu.pc, 0x0000_0008); // PC가 0x08로 점프했는지 확인
 
     // 2. 점프 타겟 명령 실행 (0x08)
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(3), 10); // x3 = 10
     assert_eq!(cpu.regs.read(2), 0); // 건너뛴 0x04의 x2는 여전히 0이어야 함
 
     // 3. JALR 실행 (x1 레지스터 주소 기반 점프)
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(4), 0x0000_0010); // x4에 복귀 주소 PC+4(0x10) 저장 확인
     assert_eq!(cpu.pc, 0x0000_0004); // PC가 x1(0x04) 위치로 복귀했는지 확인
 
     // 4. 건너뛰었던 0x04 위치의 명령 실행
-    cpu.single_cycle_step();
+    single_cycle_step(&mut cpu);
     assert_eq!(cpu.regs.read(2), 99); // x2 = 99 정상 실행 확인
 }

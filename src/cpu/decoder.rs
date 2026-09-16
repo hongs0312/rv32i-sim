@@ -28,7 +28,7 @@ pub fn imm_gen(inst: u32) -> i32 {
         0x03 | 0x13 | 0x67 => {
             // I-Type
             let imm = (inst as i32) >> 20; // Sign-extend the immediate
-            
+
             imm
         }
         0x23 => {

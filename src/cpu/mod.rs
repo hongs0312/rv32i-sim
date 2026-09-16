@@ -56,41 +56,9 @@ impl Cpu {
         }
     }
 
-    // 싱글사이클로 CPU를 실행하는 메서드
-    pub fn single_cycle_step(&mut self) {
-        // 1. Instruction Fetch
-        self.if_id_reg = self.instruction_fetch();
-
-        // 2. Instruction Decode
-        self.id_ex_reg = self.instruction_decode(self.if_id_reg.clone());
-
-        // 3. Execute
-        self.ex_mem_reg = self.execute(self.id_ex_reg.clone());
-
-        // 4. Memory Access
-        self.mem_wb_reg = self.memory_access(self.ex_mem_reg.clone());
-
-        // 5. Write Back
-        self.write_back(self.mem_wb_reg.clone());
-
-        let branch_taken = self.ex_mem_reg.control.branch
-            && get_branch_condition(
-                self.ex_mem_reg.alu_result,
-                self.ex_mem_reg.zero,
-                self.ex_mem_reg.control.funct3,
-            );
-        let pcsrc = self.ex_mem_reg.control.jump || branch_taken;
-        let branch_target = self.ex_mem_reg.target_pc;
-
-        self.update_pc(branch_target, pcsrc);
-
-        println!("regs: {:?}", self.regs);
-        println!();
-    }
-
     // CPU의 한 사이클을 수행하는 메서드
     // 파이프라이닝을 구현하기 위해서 역순으로 각 단계의 레지스터를 업데이트
-    pub fn pipeline_step(&mut self) {
+    pub fn pipeline_step(&mut self, inject_nop: bool) {
         // 1. WB 및 MEM 단계 실행 (역순)
         self.write_back(self.mem_wb_reg.clone());
         let next_mem_wb_reg = self.memory_access(self.ex_mem_reg.clone());
@@ -118,10 +86,12 @@ impl Cpu {
         // 5. 제어 흐름 업데이트 (Flush > Stall > Normal)
         if pcsrc {
             // Branch/Jump Taken: Target PC로 업데이트 후 선행 파이프라인(IF/ID, ID/EX) Flush
-            self.update_pc(branch_target, true);
+            // self.update_pc(branch_target, true, inject_nop);
+            self.pc = branch_target;
 
             self.if_id_reg = IfIdRegister::default();
             self.id_ex_reg = IdExRegister::default();
+
             // next_ex_mem_reg(점프/분기 명령어 본체)는 WB까지 전진하여 레지스터 쓰기 수행
             self.ex_mem_reg = next_ex_mem_reg;
         } else if is_stall {
@@ -131,9 +101,9 @@ impl Cpu {
         } else {
             // 정상 진행
             let next_id_ex_reg = self.instruction_decode(self.if_id_reg.clone());
-            let next_if_id_reg = self.instruction_fetch();
+            let next_if_id_reg = self.instruction_fetch(inject_nop);
 
-            self.update_pc(branch_target, false);
+            self.update_pc(branch_target, false, inject_nop);
 
             self.if_id_reg = next_if_id_reg;
             self.id_ex_reg = next_id_ex_reg;
@@ -142,9 +112,50 @@ impl Cpu {
 
         // 6. MEM/WB 레지스터 업데이트
         self.mem_wb_reg = next_mem_wb_reg;
+    }
 
-        println!("regs: {:?}", self.regs);
-        println!();
+    fn update_pc(&mut self, branch_target: u32, pcsrc: bool, inject_nop: bool) {
+        if inject_nop {
+            return;
+        }
+
+        let next_pc = self.pc.wrapping_add(4);
+        self.pc = if pcsrc { branch_target } else { next_pc };
+    }
+
+    fn instruction_fetch(&mut self, inject_nop: bool) -> IfIdRegister {
+        let cur_pc = self.pc;
+
+        let instruction = match inject_nop {
+            true => 0x00000013, // NOP instruction
+            false => self.bus.load32(self.pc).expect("Fetch failed"),
+        };
+
+        IfIdRegister {
+            pc: cur_pc,
+            instruction,
+        }
+    }
+
+    fn instruction_decode(&mut self, if_id_reg: IfIdRegister) -> IdExRegister {
+        let (pc, instruction) = (if_id_reg.pc, if_id_reg.instruction);
+        let (funct7, rs2, rs1, funct3, rd, opcode) = Decoder::decode(instruction);
+
+        let rs1_data = self.regs.read(rs1);
+        let rs2_data = self.regs.read(rs2);
+        let imm = imm_gen(instruction);
+        let control = get_control_signals(opcode, funct3, funct7);
+
+        IdExRegister {
+            control,
+            pc,
+            rd,
+            rs1,
+            rs2,
+            rs1_data,
+            rs2_data,
+            imm,
+        }
     }
 
     fn execute(&mut self, id_ex_reg: IdExRegister) -> ExMemRegister {
@@ -210,41 +221,6 @@ impl Cpu {
             alu_result,
             rd,
             rs2_data: rs2_data_forwarded,
-        }
-    }
-
-    fn update_pc(&mut self, branch_target: u32, pcsrc: bool) {
-        let next_pc = self.pc.wrapping_add(4);
-        self.pc = if pcsrc { branch_target } else { next_pc };
-    }
-
-    fn instruction_fetch(&mut self) -> IfIdRegister {
-        let cur_pc = self.pc;
-        let instruction = self.bus.load32(self.pc).expect("Fetch failed");
-        IfIdRegister {
-            pc: cur_pc,
-            instruction,
-        }
-    }
-
-    fn instruction_decode(&mut self, if_id_reg: IfIdRegister) -> IdExRegister {
-        let (pc, instruction) = (if_id_reg.pc, if_id_reg.instruction);
-        let (funct7, rs2, rs1, funct3, rd, opcode) = Decoder::decode(instruction);
-
-        let rs1_data = self.regs.read(rs1);
-        let rs2_data = self.regs.read(rs2);
-        let imm = imm_gen(instruction);
-        let control = get_control_signals(opcode, funct3, funct7);
-
-        IdExRegister {
-            control,
-            pc,
-            rd,
-            rs1,
-            rs2,
-            rs1_data,
-            rs2_data,
-            imm,
         }
     }
 

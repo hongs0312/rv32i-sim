@@ -45,7 +45,7 @@ impl Default for ControlSignals {
             mem_write: false,
 
             reg_write: false, // NOP일 때 Safe
-            wb_src: false,        // ALU 결과 기본
+            wb_src: false,    // ALU 결과 기본
 
             is_ecall: false,
         }

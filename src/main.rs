@@ -16,6 +16,9 @@ struct Args {
     source: String,
 
     #[arg(short, long, default_value_t = false)]
+    pipeline: bool,
+
+    #[arg(short, long, default_value_t = false)]
     verbose: bool,
 
     #[arg(short, long, default_value_t = 100000)]
@@ -89,11 +92,58 @@ fn setup_cpu(program: &[u32]) -> Cpu {
     cpu
 }
 
-fn run_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
-    println!("[3/3] 파이프라인 시뮬레이션 시작\n");
+fn run_single_cycle_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
+    println!("[3/3] 싱글사이클 시뮬레이션 시작\n");
 
-    // 메모리 초기화 후 시뮬레이션 시작 전
-    println!("DRAM[0x258] = {:08x}", cpu.bus.load32(0x258).unwrap_or(0));
+    println!("{:=^70}", " Simulation Running ");
+
+    let mut cycle_count = 0;
+
+    loop {
+        if cycle_count >= max_steps {
+            println!(
+                "\n[경고] 최대 실행 클럭 수({})에 도달하여 종료합니다.",
+                max_steps
+            );
+            break;
+        }
+
+        if verbose {
+            println!(
+                "[{:05} Cycle] PC: 0x{:08X} | sp: 0x{:08X} | a0: {} | s0: {} | s5: {}",
+                cycle_count,
+                cpu.pc,
+                cpu.regs.read(2),  // sp (x2)
+                cpu.regs.read(10), // a0 (x10)
+                cpu.regs.read(8),  // s0 (x8)
+                cpu.regs.read(15)  // s5 (x15)
+            );
+        }
+
+        cpu.pipeline_step(false);
+
+        if cpu.if_id_reg.instruction == 0x00000073 {
+            let exit_code = cpu.regs.read(10); // a0 (x10)
+            println!("\n{:=^70}", " Simulation Finished ");
+            println!(
+                ">> Program exited with status code: {} (0x{:X})",
+                exit_code, exit_code
+            );
+            println!(">> Total executed cycles: {} cycles", cycle_count + 1);
+            break;
+        }
+
+        // 충분한 사이클 동안 파이프라인 펌핑 (NOP 4개를 4사이클동안 주입)
+        for _ in 0..4 {
+            cpu.pipeline_step(true);
+
+            cycle_count += 1;
+        }
+    }
+}
+
+fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
+    println!("[3/3] 파이프라인 시뮬레이션 시작\n");
 
     println!("{:=^70}", " Simulation Running ");
 
@@ -124,8 +174,11 @@ fn run_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
         }
 
         // 1. 먼저 1클럭(사이클) 수행
-        cpu.pipeline_step();
+        cpu.pipeline_step(false);
         cycle_count += 1;
+
+        // println!("{:?}", cpu.regs); // 레지스터 상태 출력
+        // println!(); // 줄바꿈
 
         // // 2. WB 단계(또는 MEM/WB 레지스터)로 완전히 들어온 명령어의 메모리 주소/값을 확인
         // // ecall 명령어가 Flush되지 않고 WB Stage까지 완전히 도달했을 때만 종료
@@ -158,5 +211,9 @@ fn main() {
 
     let program = compile_and_extract(&args.source);
     let cpu = setup_cpu(&program);
-    run_simulation(cpu, args.verbose, args.max_steps);
+    if args.pipeline {
+        run_pipline_simulation(cpu, args.verbose, args.max_steps);
+    } else {
+        run_single_cycle_simulation(cpu, args.verbose, args.max_steps);
+    }
 }

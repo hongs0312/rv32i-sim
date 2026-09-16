@@ -41,10 +41,12 @@ impl ForwardingUnit {
         // 조건 1: MEM/WB 단계에서 레지스터 쓰기 활성화
         // 조건 2: MEM/WB 단계에서 쓰기 대상 레지스터가 0이 아님
         // 조건 3: MEM/WB 단계에서 쓰기 대상 레지스터가 ID/EX 단계에서 읽는 rs1과 동일
-        if mem_wb_reg.control.reg_write && mem_wb_reg.rd != 0 && mem_wb_reg.rd == id_ex_reg.rs1 {
+        if mem_wb_reg.control.reg_write && (mem_wb_reg.rd != 0) && (mem_wb_reg.rd == id_ex_reg.rs1)
+        {
             forward_a = ForwardA::ForwardFromWb;
         }
-        if mem_wb_reg.control.reg_write && mem_wb_reg.rd != 0 && mem_wb_reg.rd == id_ex_reg.rs2 {
+        if mem_wb_reg.control.reg_write && (mem_wb_reg.rd != 0) && (mem_wb_reg.rd == id_ex_reg.rs2)
+        {
             forward_b = ForwardB::ForwardFromWb;
         }
 

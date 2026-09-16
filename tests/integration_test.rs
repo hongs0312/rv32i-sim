@@ -49,7 +49,7 @@ fn test_pipelined_cpu_hazards() {
         // 디버깅용 사이클 출력 (선택 사항)
         println!("--- Cycle {} ---", cycle);
 
-        cpu.pipeline_step();
+        cpu.pipeline_step(false); // NOP 주입 없이 파이프라인 단계 진행
 
         println!("PC: {:#010x}", cpu.pc);
         println!("x1: {}, x2: {}", cpu.regs.read(1), cpu.regs.read(2));
