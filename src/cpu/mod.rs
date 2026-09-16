@@ -31,8 +31,6 @@ pub struct Cpu {
     /// CPU가 접근할 수 있는 메모리 인터페이스
     pub bus: Bus,
 
-    pub branch_taken: bool,
-
     pub if_id_reg: IfIdRegister,
     pub id_ex_reg: IdExRegister,
     pub ex_mem_reg: ExMemRegister,
@@ -46,8 +44,6 @@ impl Cpu {
             regs: RegisterFile::new(),
             alu: Alu::new(),
             bus,
-
-            branch_taken: false, // memory access 단계에서 branch가 taken되었는지 여부를 추적
 
             if_id_reg: IfIdRegister::default(),
             id_ex_reg: IdExRegister::default(),
@@ -83,6 +79,9 @@ impl Cpu {
             self.if_id_reg.instruction,
         );
 
+        let next_id_ex_reg = self.instruction_decode(self.if_id_reg.clone());
+        let next_if_id_reg = self.instruction_fetch(inject_nop);
+
         // 5. 제어 흐름 업데이트 (Flush > Stall > Normal)
         if pcsrc {
             // Branch/Jump Taken: Target PC로 업데이트 후 선행 파이프라인(IF/ID, ID/EX) Flush
@@ -99,10 +98,6 @@ impl Cpu {
             self.id_ex_reg = IdExRegister::default();
             self.ex_mem_reg = next_ex_mem_reg;
         } else {
-            // 정상 진행
-            let next_id_ex_reg = self.instruction_decode(self.if_id_reg.clone());
-            let next_if_id_reg = self.instruction_fetch(inject_nop);
-
             self.update_pc(branch_target, false, inject_nop);
 
             self.if_id_reg = next_if_id_reg;
