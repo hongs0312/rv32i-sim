@@ -121,7 +121,8 @@ fn run_single_cycle_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
         }
 
         cpu.pipeline_step(false);
-
+        
+        // ecall fetch 시점에서 종료 조건 확인
         if cpu.if_id_reg.instruction == 0x00000073 {
             let exit_code = cpu.regs.read(10); // a0 (x10)
             println!("\n{:=^70}", " Simulation Finished ");
