@@ -52,9 +52,8 @@ impl ForwardingUnit {
 
         // EX 단계에서 rs1에 대한 forwarding 결정
         // 조건 1: EX/MEM 단계에서 레지스터 쓰기 활성화
-        // 조건 2: EX/MEM 단계에서 메모리 읽기 활성화가 아닌 경우 (load 명령어가 아닌 경우)
-        // 조건 3: EX/MEM 단계에서 쓰기 대상 레지스터가 0이 아님
-        // 조건 4: EX/MEM 단계에서 쓰기 대상 레지스터가 ID/EX 단계에서 읽는 rs1과 동일
+        // 조건 2: EX/MEM 단계에서 쓰기 대상 레지스터가 0이 아님
+        // 조건 3: EX/MEM 단계에서 쓰기 대상 레지스터가 ID/EX 단계에서 읽는 rs1과 동일
         if ex_mem_reg.control.reg_write && (ex_mem_reg.rd != 0) && (ex_mem_reg.rd == id_ex_reg.rs1)
         {
             forward_a = ForwardA::ForwardFromMem;
@@ -71,6 +70,8 @@ impl ForwardingUnit {
 pub struct HazardDetectionUnit;
 
 impl HazardDetectionUnit {
+    // load-use hazard detection
+    // EX 단계에서 load 명령어가 수행될 때, 다음 명령어가 load 명령어의 결과를 필요로 하는 경우, pipeline을 stall 시켜야 함
     pub fn check_load_use(id_ex_mem_read: bool, id_ex_rd: u8, if_id_instruction: u32) -> bool {
         // EX 단계에서 load 명령어가 아니거나 쓰기 대상 레지스터가 x0이면 hazard 없음
         if !id_ex_mem_read || id_ex_rd == 0 {

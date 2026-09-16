@@ -7,7 +7,6 @@ use std::path::Path;
 use std::process::Command;
 
 const RAM_SIZE: usize = 16 * 1024 * 1024; // 16MB
-// const STACK_TOP: u32 = 0x00FF_FFFC; // 16MB 상단 스택 위치
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "RV32I C-Code Compiler & Pipelined Simulator")]
@@ -87,8 +86,6 @@ fn setup_cpu(program: &[u32]) -> Cpu {
     let bus = Bus { dram };
     let cpu = Cpu::new(bus);
 
-    // // 스택 포인터(sp = x2) 초기화
-    // cpu.regs.write(2, STACK_TOP, true);
     cpu
 }
 
@@ -121,7 +118,8 @@ fn run_single_cycle_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
         }
 
         cpu.pipeline_step(false);
-        
+        cycle_count += 1;
+
         // ecall fetch 시점에서 종료 조건 확인
         if cpu.if_id_reg.instruction == 0x00000073 {
             let exit_code = cpu.regs.read(10); // a0 (x10)
@@ -174,23 +172,12 @@ fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
             );
         }
 
-        // 1. 먼저 1클럭(사이클) 수행
+        // 1. 1클럭(사이클) 수행
         cpu.pipeline_step(false);
         cycle_count += 1;
 
-        // println!("{:?}", cpu.regs); // 레지스터 상태 출력
-        // println!(); // 줄바꿈
-
-        // // 2. WB 단계(또는 MEM/WB 레지스터)로 완전히 들어온 명령어의 메모리 주소/값을 확인
-        // // ecall 명령어가 Flush되지 않고 WB Stage까지 완전히 도달했을 때만 종료
-        // let wb_pc = cpu.mem_wb_reg.rd; // 만약 mem_wb_reg에 PC가 있다면 사용, 없으면 아래 방식 참조
-        // let wb_inst = cpu.bus.load32(cpu.mem_wb_reg.alu_result).unwrap_or(0);
-
-        // 가장 간단한 수정 방법:
-        // CPU 내부 execution 흐름 중 MEM/WB 단계 제어 신호에 is_ecall 등을 두거나,
-        // IF/ID stage가 아닌, 파이프라인을 거쳐서 온 mem_wb_reg의 제어 신호를 확인합니다.
+        // 2. ecall 명령어가 flush 되지 않고 WB 단계에 도달했는지 확인
         if cpu.mem_wb_reg.control.is_ecall {
-            // (control 신호에 is_ecall 추가 권장)
             let exit_code = cpu.regs.read(10); // a0 (x10)
             println!("\n{:=^70}", " Simulation Finished ");
             println!(
@@ -212,9 +199,9 @@ fn main() {
 
     let program = compile_and_extract(&args.source);
     let cpu = setup_cpu(&program);
-    if args.pipeline {
-        run_pipline_simulation(cpu, args.verbose, args.max_steps);
-    } else {
-        run_single_cycle_simulation(cpu, args.verbose, args.max_steps);
+
+    match args.pipeline {
+        true => run_pipline_simulation(cpu, args.verbose, args.max_steps),
+        false => run_single_cycle_simulation(cpu, args.verbose, args.max_steps),
     }
 }
