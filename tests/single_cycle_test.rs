@@ -25,6 +25,14 @@ fn setup_cpu(program: &[u32]) -> Cpu {
     cpu
 }
 
+fn single_cycle_step(cpu: &mut Cpu) {
+    cpu.pipeline_step(false); // NOP 주입 없이 파이프라인 단계 진행
+
+    for _ in 0..4 {
+        cpu.pipeline_step(true); // NOP 주입하여 파이프라인 단계 진행
+    }
+}
+
 #[test]
 fn test_single_cycle_execution() {
     let instructions = vec![
@@ -44,7 +52,7 @@ fn test_single_cycle_execution() {
     let mut cpu = setup_cpu(&instructions); // 초기화만 하고 명령어는 나중에 로드
 
     for _ in 0..20 {
-        cpu.single_cycle_step();
+        single_cycle_step(&mut cpu);
     }
 
     assert_eq!(cpu.regs.read(1), 10);
@@ -75,7 +83,7 @@ fn test_pipeline_trap() {
 
     // ... 실행 및 검증
     for _ in 0..20 {
-        cpu.single_cycle_step();
+        single_cycle_step(&mut cpu);
     }
 
     assert_eq!(cpu.regs.read(1), 0x14); // JALR로 인해 x1에 Target 주소 저장
@@ -96,6 +104,6 @@ fn nop_test() {
 
     // ... 실행 및 검증
     for _ in 0..20 {
-        cpu.single_cycle_step();
+        single_cycle_step(&mut cpu);
     }
 }
