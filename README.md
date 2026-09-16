@@ -24,8 +24,8 @@ cargo run -- --source <PATH_TO_C_FILE> [OPTIONS]
 ## Options
 | Option | Long Flag | Description | Default |
 | --- | --- | --- | --- |
-| -p | --pipeline | piplineing option (basically 4 nop injection for 1 instruction) | false |
 | -s | --source | Path to the target C source file | files/main.c |
+| -p | --pipeline | piplineing option (basically 4 nop injection for 1 instruction) | false |
 | -v | --verbose |Enable cycle-by-cycle trace log (PC, Inst, sp, a0) | false |
 | -m | --max-steps | Maximum instruction limit to prevent infinite loops | 100000 |
 
