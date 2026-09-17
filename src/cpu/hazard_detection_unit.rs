@@ -6,7 +6,7 @@
 
 use crate::cpu::{
     decoder::*,
-    register::{ExMemRegister, IdExRegister, MemWbRegister},
+    register::{IdExRegister, MemWbRegister},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,38 +29,34 @@ pub struct ForwardingUnit;
 impl ForwardingUnit {
     pub fn get_forward_signals(
         id_ex_reg: &IdExRegister,
-        ex_mem_reg: &ExMemRegister,
-        mem_wb_reg: &MemWbRegister,
+        mem_reg: &MemWbRegister,
+        wb_reg: &MemWbRegister,
     ) -> (ForwardA, ForwardB) {
         let mut forward_a = ForwardA::NoForward;
         let mut forward_b = ForwardB::NoForward;
 
-        // 단계적으로 거슬러 올라가며 forwarding 필요 여부를 판단
+        // MEM Stage Forwarding
+        if mem_reg.control.reg_write && (mem_reg.rd != 0) && (mem_reg.rd == id_ex_reg.rs1) {
+            forward_a = ForwardA::ForwardFromMem;
+        }
+        if mem_reg.control.reg_write && (mem_reg.rd != 0) && (mem_reg.rd == id_ex_reg.rs2) {
+            forward_b = ForwardB::ForwardFromMem;
+        }
 
-        // MEM 단계에서 rs1에 대한 forwarding 결정
-        // 조건 1: MEM/WB 단계에서 레지스터 쓰기 활성화
-        // 조건 2: MEM/WB 단계에서 쓰기 대상 레지스터가 0이 아님
-        // 조건 3: MEM/WB 단계에서 쓰기 대상 레지스터가 ID/EX 단계에서 읽는 rs1과 동일
-        if mem_wb_reg.control.reg_write && (mem_wb_reg.rd != 0) && (mem_wb_reg.rd == id_ex_reg.rs1)
+        // WB forwarding has lower priority than MEM forwarding.
+        if forward_a == ForwardA::NoForward
+            && wb_reg.control.reg_write
+            && (wb_reg.rd != 0)
+            && (wb_reg.rd == id_ex_reg.rs1)
         {
             forward_a = ForwardA::ForwardFromWb;
         }
-        if mem_wb_reg.control.reg_write && (mem_wb_reg.rd != 0) && (mem_wb_reg.rd == id_ex_reg.rs2)
+        if forward_b == ForwardB::NoForward
+            && wb_reg.control.reg_write
+            && (wb_reg.rd != 0)
+            && (wb_reg.rd == id_ex_reg.rs2)
         {
             forward_b = ForwardB::ForwardFromWb;
-        }
-
-        // EX 단계에서 rs1에 대한 forwarding 결정
-        // 조건 1: EX/MEM 단계에서 레지스터 쓰기 활성화
-        // 조건 2: EX/MEM 단계에서 쓰기 대상 레지스터가 0이 아님
-        // 조건 3: EX/MEM 단계에서 쓰기 대상 레지스터가 ID/EX 단계에서 읽는 rs1과 동일
-        if ex_mem_reg.control.reg_write && (ex_mem_reg.rd != 0) && (ex_mem_reg.rd == id_ex_reg.rs1)
-        {
-            forward_a = ForwardA::ForwardFromMem;
-        }
-        if ex_mem_reg.control.reg_write && (ex_mem_reg.rd != 0) && (ex_mem_reg.rd == id_ex_reg.rs2)
-        {
-            forward_b = ForwardB::ForwardFromMem;
         }
 
         (forward_a, forward_b)

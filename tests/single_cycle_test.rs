@@ -17,7 +17,7 @@ fn setup_cpu(program: &[u32]) -> Cpu {
         dram.dram[addr + 3] = bytes[3];
     }
 
-    let bus = Bus { dram };
+    let bus = Bus::new(dram);
     let cpu = Cpu::new(bus);
 
     // // 스택 포인터(sp = x2) 초기화

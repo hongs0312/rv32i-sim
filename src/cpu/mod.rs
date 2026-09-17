@@ -10,25 +10,25 @@ pub mod decoder;
 pub mod hazard_detection_unit;
 pub mod register;
 
-// cpu를 이루는 모듈
+use crate::bus::Bus;
 use crate::cpu::alu::*;
 use crate::cpu::branch::*;
 use crate::cpu::control::*;
 use crate::cpu::decoder::*;
+use crate::cpu::hazard_detection_unit::*;
 use crate::cpu::register::*;
 
-// Hazard Detection Unit 모듈
-use crate::cpu::hazard_detection_unit::*;
-
-// Memory Bus 모듈
-use crate::bus::Bus;
+// 파이프라인 단계의 상태를 표현하는 Enum
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum StageStatus<T> {
+    Busy,
+    Complete(T),
+}
 
 pub struct Cpu {
     pub pc: u32,
     pub regs: RegisterFile,
     pub alu: Alu,
-
-    /// CPU가 접근할 수 있는 메모리 인터페이스
     pub bus: Bus,
 
     pub if_id_reg: IfIdRegister,
@@ -52,70 +52,94 @@ impl Cpu {
         }
     }
 
-    // CPU의 한 사이클을 수행하는 메서드
-    // 파이프라이닝을 구현하기 위해서 역순으로 각 단계의 레지스터를 업데이트
     pub fn pipeline_step(&mut self, inject_nop: bool) {
         // 1. WB 및 MEM 단계 실행 (역순)
-        self.write_back(self.mem_wb_reg.clone());
-        let next_mem_wb_reg = self.memory_access(self.ex_mem_reg.clone());
+        self.write_back(self.mem_wb_reg);
 
-        // 2. EX 단계 실행
-        let next_ex_mem_reg = self.execute(self.id_ex_reg.clone());
+        let mem_status = self.memory_access(self.ex_mem_reg);
+        let is_mem_busy = matches!(mem_status, StageStatus::Busy);
 
-        // 3. EX 단계의 연산 결과(next_ex_mem_reg)를 기반으로 Branch/Jump 판정
-        let branch_taken = next_ex_mem_reg.control.branch
-            && get_branch_condition(
-                next_ex_mem_reg.alu_result,
-                next_ex_mem_reg.zero,
-                next_ex_mem_reg.control.funct3,
-            );
-        let pcsrc = next_ex_mem_reg.control.jump || branch_taken;
-        let branch_target = next_ex_mem_reg.target_pc;
+        let next_mem_wb_reg = match mem_status {
+            StageStatus::Complete(reg) => reg,
+            StageStatus::Busy => MemWbRegister::default(),
+        };
 
-        // 4. Load-Use Hazard Detection
-        let is_stall = HazardDetectionUnit::check_load_use(
+        // 3. EX 단계 실행
+        let ex_status = match is_mem_busy {
+            true => StageStatus::Busy,
+            false => self.execute(self.id_ex_reg, &next_mem_wb_reg),
+        };
+        let is_ex_busy = matches!(ex_status, StageStatus::Busy);
+
+        // EX 단계 래치 결과 및 분기 판정 제어 신호 추출
+        let (next_ex_mem_reg, pcsrc, branch_target) = match ex_status {
+            StageStatus::Complete(ex_reg) => {
+                let branch_taken = ex_reg.control.branch
+                    && get_branch_condition(ex_reg.alu_result, ex_reg.zero, ex_reg.control.funct3);
+
+                let is_pcsrc = ex_reg.control.jump || branch_taken;
+
+                (ex_reg, is_pcsrc, ex_reg.target_pc)
+            }
+            StageStatus::Busy => {
+                (ExMemRegister::default(), false, 0)
+            }
+        };
+
+        // 4. 앞단 실행 (ID, IF)
+        let mut is_stall = HazardDetectionUnit::check_load_use(
             self.id_ex_reg.control.mem_read,
             self.id_ex_reg.rd,
             self.if_id_reg.instruction,
         );
 
-        let next_id_ex_reg = self.instruction_decode(self.if_id_reg.clone());
-        let next_if_id_reg = self.instruction_fetch(inject_nop);
-
-        // 5. 제어 흐름 업데이트 (Flush > Stall > Normal)
+        // 👇 [버그 픽스 1] Ghost Stall 무시: 어차피 점프(pcsrc)로 인해 버려질 명령어들이 만든 스톨은 무시합니다!
         if pcsrc {
-            // Branch/Jump Taken: Target PC로 업데이트 후 선행 파이프라인(IF/ID, ID/EX) Flush
-            // self.update_pc(branch_target, true, inject_nop);
-            self.pc = branch_target;
-
-            self.if_id_reg = IfIdRegister::default();
-            self.id_ex_reg = IdExRegister::default();
-
-            // next_ex_mem_reg(점프/분기 명령어 본체)는 WB까지 전진하여 레지스터 쓰기 수행
-            self.ex_mem_reg = next_ex_mem_reg;
-        } else if is_stall {
-            // Load-Use Hazard: ID/EX에 NOP(Bubble) 삽입, IF/ID 및 PC는 동결
-            self.id_ex_reg = IdExRegister::default();
-            self.ex_mem_reg = next_ex_mem_reg;
-        } else {
-            self.update_pc(branch_target, false, inject_nop);
-
-            self.if_id_reg = next_if_id_reg;
-            self.id_ex_reg = next_id_ex_reg;
-            self.ex_mem_reg = next_ex_mem_reg;
+            is_stall = false;
         }
 
-        // 6. MEM/WB 레지스터 업데이트
-        self.mem_wb_reg = next_mem_wb_reg;
+        let next_id_ex_reg = self.instruction_decode(self.if_id_reg);
+        let next_if_id_reg = self.instruction_fetch(inject_nop);
+
+        let freeze_all = is_mem_busy || is_ex_busy || is_stall;
+        let freeze_ex = is_mem_busy || is_ex_busy;
+
+        // 5. 래치 업데이트
+        if !freeze_all {
+            self.update_pc(branch_target, pcsrc, inject_nop);
+
+            self.if_id_reg = match pcsrc {
+                true => IfIdRegister::default(),
+                false => next_if_id_reg,
+            };
+        }
+
+        if !freeze_ex {
+            self.id_ex_reg = match pcsrc || is_stall {
+                true => IdExRegister::default(),
+                false => next_id_ex_reg,
+            };
+        }
+
+        if !is_mem_busy {
+            self.ex_mem_reg = match is_ex_busy {
+                true => ExMemRegister::default(),
+                false => next_ex_mem_reg,
+            }
+        }
+
+        self.mem_wb_reg = match is_mem_busy {
+            true => MemWbRegister::default(),
+            false => next_mem_wb_reg,
+        };
     }
 
     fn update_pc(&mut self, branch_target: u32, pcsrc: bool, inject_nop: bool) {
-        if inject_nop {
-            return;
+        if pcsrc {
+            self.pc = branch_target;
+        } else if !inject_nop {
+            self.pc = self.pc.wrapping_add(4);
         }
-
-        let next_pc = self.pc.wrapping_add(4);
-        self.pc = if pcsrc { branch_target } else { next_pc };
     }
 
     fn instruction_fetch(&mut self, inject_nop: bool) -> IfIdRegister {
@@ -139,6 +163,7 @@ impl Cpu {
         let rs1_data = self.regs.read(rs1);
         let rs2_data = self.regs.read(rs2);
         let imm = imm_gen(instruction);
+
         let control = get_control_signals(opcode, funct3, funct7);
 
         IdExRegister {
@@ -153,24 +178,32 @@ impl Cpu {
         }
     }
 
-    fn execute(&mut self, id_ex_reg: IdExRegister) -> ExMemRegister {
-        // 인자로 전달받은 id_ex_reg 참조
-        let (forward_a, forward_b) =
-            ForwardingUnit::get_forward_signals(&id_ex_reg, &self.ex_mem_reg, &self.mem_wb_reg);
-
-        let (control, pc, rd, rs1_data, rs2_data, imm) = (
+    fn execute(&mut self, id_ex_reg: IdExRegister, next_mem_wb_reg: &MemWbRegister) -> StageStatus<ExMemRegister> {
+        let (control, pc, rd, imm) = (
             id_ex_reg.control,
             id_ex_reg.pc,
             id_ex_reg.rd,
-            id_ex_reg.rs1_data,
-            id_ex_reg.rs2_data,
             id_ex_reg.imm,
         );
         let (funct3, funct7) = (control.funct3, control.funct7);
 
+        let rs1_data = self.regs.read(id_ex_reg.rs1);
+        let rs2_data = self.regs.read(id_ex_reg.rs2);
+
+        // 👇 [버그 픽스 2] 무조건 점프(JAL) 중 rd=x0 인 경우 무시되는 것을 막기 위해 !control.jump 조건 추가
+        if !control.reg_write && !control.mem_write && !control.branch && !control.jump && !control.is_ecall {
+            return StageStatus::Complete(ExMemRegister::default());
+        }
+
+        let (forward_a, forward_b) =
+            ForwardingUnit::get_forward_signals(&id_ex_reg, next_mem_wb_reg, &self.mem_wb_reg);
+
         let rs1_data_forwarded = match forward_a {
             ForwardA::NoForward => rs1_data,
-            ForwardA::ForwardFromMem => self.ex_mem_reg.alu_result,
+            ForwardA::ForwardFromMem => match next_mem_wb_reg.control.wb_src {
+                true => next_mem_wb_reg.mem_data,
+                false => next_mem_wb_reg.alu_result,
+            },
             ForwardA::ForwardFromWb => match self.mem_wb_reg.control.wb_src {
                 true => self.mem_wb_reg.mem_data,
                 false => self.mem_wb_reg.alu_result,
@@ -179,7 +212,10 @@ impl Cpu {
 
         let rs2_data_forwarded = match forward_b {
             ForwardB::NoForward => rs2_data,
-            ForwardB::ForwardFromMem => self.ex_mem_reg.alu_result,
+            ForwardB::ForwardFromMem => match next_mem_wb_reg.control.wb_src {
+                true => next_mem_wb_reg.mem_data,
+                false => next_mem_wb_reg.alu_result,
+            },
             ForwardB::ForwardFromWb => match self.mem_wb_reg.control.wb_src {
                 true => self.mem_wb_reg.mem_data,
                 false => self.mem_wb_reg.alu_result,
@@ -195,9 +231,14 @@ impl Cpu {
             false => rs2_data_forwarded,
         };
 
-        let (raw_alu_result, zero) = self
+        let alu_status = self
             .alu
-            .get_alu_result(a, b, control.alu_op, funct3, funct7);
+            .execute_with_cycles(a, b, control.alu_op, funct3, funct7);
+
+        let (raw_alu_result, zero) = match alu_status {
+            StageStatus::Busy => return StageStatus::Busy,
+            StageStatus::Complete(res) => res,
+        };
 
         let target_pc = match control.is_jalr {
             true => raw_alu_result & !1,
@@ -209,44 +250,39 @@ impl Cpu {
             false => raw_alu_result,
         };
 
-        ExMemRegister {
+        let result_reg = ExMemRegister {
             control,
             target_pc,
             zero,
             alu_result,
             rd,
             rs2_data: rs2_data_forwarded,
-        }
+        };
+        StageStatus::Complete(result_reg)
     }
 
-    fn memory_access(&mut self, ex_mem_reg: ExMemRegister) -> MemWbRegister {
-        let (control, alu_result, rd, rs2_data) = (
-            ex_mem_reg.control,
+    fn memory_access(&mut self, ex_mem_reg: ExMemRegister) -> StageStatus<MemWbRegister> {
+        let control = ex_mem_reg.control;
+        let bus_status = self.bus.data_access(
             ex_mem_reg.alu_result,
-            ex_mem_reg.rd,
+            control.funct3,
+            control.mem_read,
+            control.mem_write,
             ex_mem_reg.rs2_data,
         );
-        let funct3 = control.funct3;
 
-        let mem_data = if control.mem_read {
-            self.bus
-                .load(alu_result, funct3)
-                .expect("Memory read failed")
-        } else if control.mem_write {
-            self.bus
-                .store(alu_result, funct3, rs2_data)
-                .expect("Memory write failed");
-            0
-        } else {
-            0
+        let mem_data_result = match bus_status {
+            StageStatus::Busy => return StageStatus::Busy,
+            StageStatus::Complete(res) => res.expect("Memory access failed"),
         };
 
-        MemWbRegister {
+        let result_reg = MemWbRegister {
             control,
-            alu_result,
-            mem_data,
-            rd,
-        }
+            alu_result: ex_mem_reg.alu_result,
+            mem_data: mem_data_result,
+            rd: ex_mem_reg.rd,
+        };
+        StageStatus::Complete(result_reg)
     }
 
     fn write_back(&mut self, mem_wb_reg: MemWbRegister) {

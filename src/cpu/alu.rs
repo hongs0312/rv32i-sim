@@ -8,6 +8,8 @@
 
 // // 고유한 ALU 제어 신호 정의
 
+use crate::cpu::StageStatus;
+
 #[rustfmt::skip]
 enum AluControl {
     ADD, SUB, AND, OR, XOR,
@@ -16,11 +18,37 @@ enum AluControl {
     DIV, DIVU, REM, REMU, LUI,
 }
 
-pub struct Alu;
+// ALU 제어 신호에 따른 연산 지연 시간 정의
+impl AluControl {
+    pub fn latency(&self) -> u8 {
+        match self {
+            AluControl::MUL | AluControl::MULH | AluControl::MULHSU | AluControl::MULHU => 3, // 곱셈 연산은 3 사이클
+            AluControl::DIV | AluControl::DIVU | AluControl::REM | AluControl::REMU => 20, // 나눗셈 연산은 20 사이클(가정)
+            _ => 1, // 나머지 연산은 1 사이클
+        }
+    }
+}
+
+// 다중 사이클 추적을 위한 상태 머신 Enum
+#[derive(Clone, Copy, PartialEq)]
+pub enum MultiCycleState {
+    Ready,
+    Processing {
+        cycles_left: u8, // 남은 사이클 수
+        lattched_a: u32, // 연산에 사용될 첫 번째 입력값
+        lattched_b: u32, // 연산에 사용될 두 번째 입력값
+    },
+}
+
+pub struct Alu {
+    pub state: MultiCycleState, // ALU의 현재 상태
+}
 
 impl Alu {
     pub fn new() -> Self {
-        Alu {}
+        Alu {
+            state: MultiCycleState::Ready,
+        }
     }
 
     fn alu_control(&self, alu_op: u8, funct3: u8, funct7: u8) -> AluControl {
@@ -154,19 +182,51 @@ impl Alu {
         }
     }
 
-    pub fn get_alu_result(
-        &self,
+    pub fn execute_with_cycles(
+        &mut self,
         a: u32,
         b: u32,
         alu_op: u8,
         funct3: u8,
         funct7: u8,
-    ) -> (u32, bool) {
+    ) -> StageStatus<(u32, bool)> {
         let alu_control_signal = self.alu_control(alu_op, funct3, funct7);
+        let latency = alu_control_signal.latency();
 
-        // ALU 연산 수행
+        match self.state {
+            MultiCycleState::Ready => {
+                if latency > 1 {
+                    self.state = MultiCycleState::Processing {
+                        cycles_left: latency - 1,
+                        lattched_a: a,
+                        lattched_b: b,
+                    };
+                    return StageStatus::Busy;
+                }
+            }
+            MultiCycleState::Processing {
+                cycles_left,
+                lattched_a,
+                lattched_b,
+            } => {
+                if cycles_left > 1 {
+                    self.state = MultiCycleState::Processing {
+                        cycles_left: cycles_left - 1,
+                        lattched_a,
+                        lattched_b,
+                    };
+                    return StageStatus::Busy;
+                } else {
+                    self.state = MultiCycleState::Ready;
+
+                    // 계속 바뀌는 a, b 대신 latched_a, latched_b를 사용하여 연산 수행
+                    let alu_out = self.execute(lattched_a, lattched_b, alu_control_signal);
+                    return StageStatus::Complete((alu_out, alu_out == 0));
+                }
+            }
+        }
+
         let alu_out = self.execute(a, b, alu_control_signal);
-
-        (alu_out, alu_out == 0) // ALU 결과와 Zero 플래그 반환
+        StageStatus::Complete((alu_out, alu_out == 0))
     }
 }

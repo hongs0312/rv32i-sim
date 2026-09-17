@@ -11,3 +11,13 @@ _start:
     # 3. main 리턴 값(a0)을 가지고 ecall로 시뮬레이터 종료 요청
     # RISC-V ecall 명령어: 0x00000073
     ecall
+
+    # 4. Pipeline Drain용 NOP 패딩 (쓰레기 값 Fetch 방지)
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop

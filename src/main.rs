@@ -83,7 +83,7 @@ fn setup_cpu(program: &[u32]) -> Cpu {
         dram.dram[addr + 3] = bytes[3];
     }
 
-    let bus = Bus { dram };
+    let bus = Bus::new(dram);
     let cpu = Cpu::new(bus);
 
     cpu
@@ -91,7 +91,6 @@ fn setup_cpu(program: &[u32]) -> Cpu {
 
 fn run_single_cycle_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
     println!("[3/3] 싱글사이클 시뮬레이션 시작\n");
-
     println!("{:=^70}", " Simulation Running ");
 
     let mut cycle_count = 0;
@@ -105,15 +104,24 @@ fn run_single_cycle_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
             break;
         }
 
+        // 1. [안전장치] PC가 범위를 벗어났는지 확인
+        if cpu.pc >= RAM_SIZE as u32 {
+            println!(
+                "\n[경고] PC(0x{:08X})가 메모리 범위를 벗어났습니다. 비정상 종료를 감지하고 시뮬레이션을 중단합니다.",
+                cpu.pc
+            );
+            break;
+        }
+
         if verbose {
             println!(
                 "[{:05} Cycle] PC: 0x{:08X} | sp: 0x{:08X} | a0: {} | s0: {} | s5: {}",
                 cycle_count,
                 cpu.pc,
-                cpu.regs.read(2),  // sp (x2)
-                cpu.regs.read(10), // a0 (x10)
-                cpu.regs.read(8),  // s0 (x8)
-                cpu.regs.read(15)  // s5 (x15)
+                cpu.regs.read(2),
+                cpu.regs.read(10),
+                cpu.regs.read(8),
+                cpu.regs.read(15)
             );
         }
 
@@ -125,17 +133,16 @@ fn run_single_cycle_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
             let exit_code = cpu.regs.read(10); // a0 (x10)
             println!("\n{:=^70}", " Simulation Finished ");
             println!(
-                ">> Program exited with status code: {} (0x{:X})",
+                ">> Program exited gracefully with status code: {} (0x{:X})",
                 exit_code, exit_code
             );
-            println!(">> Total executed cycles: {} cycles", cycle_count + 1);
+            println!(">> Total executed cycles: {} cycles", cycle_count);
             break;
         }
 
-        // 충분한 사이클 동안 파이프라인 펌핑 (NOP 4개를 4사이클동안 주입)
+        // 충분한 사이클 동안 파이프라인 펌핑 (NOP 주입)
         for _ in 0..4 {
             cpu.pipeline_step(true);
-
             cycle_count += 1;
         }
     }
@@ -143,21 +150,41 @@ fn run_single_cycle_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
 
 fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
     println!("[3/3] 파이프라인 시뮬레이션 시작\n");
-
     println!("{:=^70}", " Simulation Running ");
 
     let mut cycle_count = 0;
 
     loop {
         if cycle_count >= max_steps {
-            println!(
-                "\n[경고] 최대 실행 클럭 수({})에 도달하여 종료합니다.",
-                max_steps
-            );
+            println!("\n[경고] 최대 실행 클럭 수에 도달하여 종료합니다.");
             break;
         }
 
-        // Verbose 출력: 각 파이프라인 Stage의 PC 상태 모니터링
+        // 1. [가장 중요] ecall이 파이프라인 끝자락에 도달했는지 먼저 검사!
+        // WB 단계나 MEM 단계에 ecall이 있다면 정상 종료 절차를 밟음
+        if cpu.mem_wb_reg.control.is_ecall || cpu.ex_mem_reg.control.is_ecall {
+            let exit_code = cpu.regs.read(10); // a0 (x10)
+            println!("\n{:=^70}", " Simulation Finished ");
+            println!(">> Program exited gracefully with status code: {} (0x{:X})", exit_code, exit_code);
+            println!(">> Total executed cycles: {} cycles", cycle_count);
+            break;
+        }
+
+        // 2. [안전장치 1] PC 메모리 범위 이탈 확인
+        if cpu.pc >= RAM_SIZE as u32 {
+            println!("\n[경고] PC(0x{:08X})가 메모리 범위를 벗어났습니다.", cpu.pc);
+            break;
+        }
+
+        // 3. [안전장치 2] 뒤따라오는 쓰레기 명령어가 아닐 때만 메모리 에러 검출
+        if cpu.ex_mem_reg.control.mem_read || cpu.ex_mem_reg.control.mem_write {
+            if cpu.ex_mem_reg.alu_result >= RAM_SIZE as u32 {
+                println!("\n[경고] 잘못된 메모리 접근 감지 (주소: 0x{:08X}).", cpu.ex_mem_reg.alu_result);
+                println!(">> Total executed cycles: {} cycles", cycle_count);
+                break;
+            }
+        }
+
         if verbose {
             println!(
                 "[{:05} Cycle] IF_PC: 0x{:08X} | ID_PC: 0x{:08X} | EX_PC: 0x{:08X} | sp: 0x{:08X} | a0: {} | s0: {} | s5: {}",
@@ -165,30 +192,19 @@ fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
                 cpu.pc,
                 cpu.if_id_reg.pc,
                 cpu.id_ex_reg.pc,
-                cpu.regs.read(2),  // sp (x2)
-                cpu.regs.read(10), // a0 (x10)
-                cpu.regs.read(8),  // s0 (x8)
-                cpu.regs.read(15)  // s5 (x15)
+                cpu.regs.read(2),
+                cpu.regs.read(10),
+                cpu.regs.read(8),
+                cpu.regs.read(15)
             );
         }
 
-        // 1. 1클럭(사이클) 수행
+        // 1클럭(사이클) 수행
         cpu.pipeline_step(false);
         cycle_count += 1;
-
-        // 2. ecall 명령어가 flush 되지 않고 WB 단계에 도달했는지 확인
-        if cpu.mem_wb_reg.control.is_ecall {
-            let exit_code = cpu.regs.read(10); // a0 (x10)
-            println!("\n{:=^70}", " Simulation Finished ");
-            println!(
-                ">> Program exited with status code: {} (0x{:X})",
-                exit_code, exit_code
-            );
-            println!(">> Total executed cycles: {} cycles", cycle_count);
-            break;
-        }
     }
 }
+
 fn main() {
     let args = Args::parse();
 

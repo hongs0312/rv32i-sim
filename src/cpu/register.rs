@@ -30,7 +30,7 @@ impl RegisterFile {
 }
 
 // pipline register structures
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IfIdRegister {
     pub pc: u32,
     pub instruction: u32,
@@ -44,7 +44,7 @@ impl Default for IfIdRegister {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IdExRegister {
     pub control: ControlSignals,
 
@@ -74,7 +74,7 @@ impl Default for IdExRegister {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct ExMemRegister {
     pub control: ControlSignals,
 
@@ -87,7 +87,7 @@ pub struct ExMemRegister {
     pub rs2_data: u32,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct MemWbRegister {
     pub control: ControlSignals,
 
