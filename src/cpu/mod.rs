@@ -81,9 +81,7 @@ impl Cpu {
 
                 (ex_reg, is_pcsrc, ex_reg.target_pc)
             }
-            StageStatus::Busy => {
-                (ExMemRegister::default(), false, 0)
-            }
+            StageStatus::Busy => (ExMemRegister::default(), false, 0),
         };
 
         // 4. 앞단 실행 (ID, IF)
@@ -178,20 +176,24 @@ impl Cpu {
         }
     }
 
-    fn execute(&mut self, id_ex_reg: IdExRegister, next_mem_wb_reg: &MemWbRegister) -> StageStatus<ExMemRegister> {
-        let (control, pc, rd, imm) = (
-            id_ex_reg.control,
-            id_ex_reg.pc,
-            id_ex_reg.rd,
-            id_ex_reg.imm,
-        );
+    fn execute(
+        &mut self,
+        id_ex_reg: IdExRegister,
+        next_mem_wb_reg: &MemWbRegister,
+    ) -> StageStatus<ExMemRegister> {
+        let (control, pc, rd, imm) = (id_ex_reg.control, id_ex_reg.pc, id_ex_reg.rd, id_ex_reg.imm);
         let (funct3, funct7) = (control.funct3, control.funct7);
 
         let rs1_data = self.regs.read(id_ex_reg.rs1);
         let rs2_data = self.regs.read(id_ex_reg.rs2);
 
         // 👇 [버그 픽스 2] 무조건 점프(JAL) 중 rd=x0 인 경우 무시되는 것을 막기 위해 !control.jump 조건 추가
-        if !control.reg_write && !control.mem_write && !control.branch && !control.jump && !control.is_ecall {
+        if !control.reg_write
+            && !control.mem_write
+            && !control.branch
+            && !control.jump
+            && !control.is_ecall
+        {
             return StageStatus::Complete(ExMemRegister::default());
         }
 

@@ -33,11 +33,14 @@ fn compile_and_extract(c_path: &str) -> Vec<u32> {
     // GCC 컴파일 수행
     let gcc_status = Command::new("riscv64-unknown-elf-gcc")
         .args([
-            "-O0",
+            "-O2",
             "-nostdlib",
             "-mabi=ilp32",
             "-march=rv32i",
-            "-Ttext=0x0",
+            "-mno-relax",
+            // "-Ttext=0x0",
+            "-T",
+            "linker.ld",
             "files/entry.s",
             c_path,
             "-o",
@@ -165,21 +168,30 @@ fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
         if cpu.mem_wb_reg.control.is_ecall || cpu.ex_mem_reg.control.is_ecall {
             let exit_code = cpu.regs.read(10); // a0 (x10)
             println!("\n{:=^70}", " Simulation Finished ");
-            println!(">> Program exited gracefully with status code: {} (0x{:X})", exit_code, exit_code);
+            println!(
+                ">> Program exited gracefully with status code: {} (0x{:X})",
+                exit_code, exit_code
+            );
             println!(">> Total executed cycles: {} cycles", cycle_count);
             break;
         }
 
         // 2. [안전장치 1] PC 메모리 범위 이탈 확인
         if cpu.pc >= RAM_SIZE as u32 {
-            println!("\n[경고] PC(0x{:08X})가 메모리 범위를 벗어났습니다.", cpu.pc);
+            println!(
+                "\n[경고] PC(0x{:08X})가 메모리 범위를 벗어났습니다.",
+                cpu.pc
+            );
             break;
         }
 
         // 3. [안전장치 2] 뒤따라오는 쓰레기 명령어가 아닐 때만 메모리 에러 검출
         if cpu.ex_mem_reg.control.mem_read || cpu.ex_mem_reg.control.mem_write {
             if cpu.ex_mem_reg.alu_result >= RAM_SIZE as u32 {
-                println!("\n[경고] 잘못된 메모리 접근 감지 (주소: 0x{:08X}).", cpu.ex_mem_reg.alu_result);
+                println!(
+                    "\n[경고] 잘못된 메모리 접근 감지 (주소: 0x{:08X}).",
+                    cpu.ex_mem_reg.alu_result
+                );
                 println!(">> Total executed cycles: {} cycles", cycle_count);
                 break;
             }

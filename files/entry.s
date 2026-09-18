@@ -1,22 +1,20 @@
-.section .text
+.section .init
 .global _start
 
 _start:
+    .option push
+    .option norelex
+
     # 1. 스택 포인터 초기화 (16MB 상단)
-    lui sp, 0x800
+    lui sp, 0x1000
 
     # 2. C main 함수 호출
     call main
 
     # 3. main 리턴 값(a0)을 가지고 ecall로 시뮬레이터 종료 요청
     # RISC-V ecall 명령어: 0x00000073
+    
     ecall
-
-    # 4. Pipeline Drain용 NOP 패딩 (쓰레기 값 Fetch 방지)
-    nop
-    nop
-    nop
-    nop
     nop
     nop
     nop
