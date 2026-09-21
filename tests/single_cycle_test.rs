@@ -1,4 +1,4 @@
-#![cfg(test)]
+#[cfg(test)]
 mod tests {
     use rv32i_sim::bus::Bus;
     use rv32i_sim::cpu::*;
@@ -53,7 +53,7 @@ mod tests {
 
         let mut cpu = setup_cpu(&instructions); // 초기화만 하고 명령어는 나중에 로드
 
-        for _ in 0..20 {
+        for _ in 0..40 {
             single_cycle_step(&mut cpu);
         }
 
@@ -84,7 +84,7 @@ mod tests {
         let mut cpu = setup_cpu(&instructions); // 초기화만 하고 명령어는 나중에 로드
 
         // ... 실행 및 검증
-        for _ in 0..20 {
+        for _ in 0..40 {
             single_cycle_step(&mut cpu);
         }
 

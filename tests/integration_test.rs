@@ -46,8 +46,8 @@ mod tests {
 
         let mut cpu = setup_cpu(&instructions); // 초기화만 하고 명령어는 나중에 로드
 
-        // 충분한 사이클 동안 파이프라인 펌핑 (NOP 5개를 고려해 약 20 사이클)
-        for cycle in 1..=20 {
+        // 메모리 접근 지연을 포함해 충분한 사이클 동안 파이프라인 펌핑
+        for cycle in 1..=40 {
             // 디버깅용 사이클 출력 (선택 사항)
             println!("--- Cycle {} ---", cycle);
 

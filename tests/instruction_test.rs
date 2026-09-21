@@ -1,6 +1,6 @@
-#![cfg(test)]
+#[cfg(test)]
 mod tests {
-    use rv32i_sim::bus::Bus;
+    use rv32i_sim::bus::{Bus, BusState};
     use rv32i_sim::cpu::*;
     use rv32i_sim::memory::Dram;
 
@@ -28,10 +28,51 @@ mod tests {
     }
 
     fn single_cycle_step(cpu: &mut Cpu) {
-        cpu.pipeline_step(false); // NOP 주입 없이 파이프라인 단계 진행
+        let mut pipeline_was_busy = false;
 
-        for _ in 0..4 {
+        cpu.pipeline_step(false); // NOP 주입 없이 파이프라인 단계 진행
+        pipeline_was_busy |= matches!(cpu.bus.state, BusState::Processing(_));
+        pipeline_was_busy |= matches!(
+            cpu.alu.state,
+            rv32i_sim::cpu::alu::MultiCycleState::Processing { .. }
+        );
+
+        for _ in 0..5 {
             cpu.pipeline_step(true); // NOP 주입하여 파이프라인 단계 진행
+            pipeline_was_busy |= matches!(cpu.bus.state, BusState::Processing(_));
+            pipeline_was_busy |= matches!(
+                cpu.alu.state,
+                rv32i_sim::cpu::alu::MultiCycleState::Processing { .. }
+            );
+        }
+
+        let is_multicycle_instruction =
+            |instruction: u32| instruction & 0x7f == 0x33 && (instruction >> 25) & 0x7f == 0x01;
+
+        while !matches!(
+            cpu.alu.state,
+            rv32i_sim::cpu::alu::MultiCycleState::Processing { .. }
+        ) && (is_multicycle_instruction(cpu.if_id_reg.instruction)
+            || (cpu.id_ex_reg.control.alu_op == 0b10 && cpu.id_ex_reg.control.funct7 == 0x01))
+        {
+            cpu.pipeline_step(true);
+            pipeline_was_busy = true;
+        }
+
+        if pipeline_was_busy {
+            while matches!(cpu.bus.state, BusState::Processing(_))
+                || matches!(
+                    cpu.alu.state,
+                    rv32i_sim::cpu::alu::MultiCycleState::Processing { .. }
+                )
+            {
+                cpu.pipeline_step(true);
+            }
+
+            // 완료된 결과가 EX/MEM과 MEM/WB를 거쳐 WB에 도달하도록 진행한다.
+            for _ in 0..2 {
+                cpu.pipeline_step(true);
+            }
         }
     }
 
