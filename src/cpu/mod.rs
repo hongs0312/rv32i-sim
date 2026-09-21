@@ -91,7 +91,7 @@ impl Cpu {
             self.if_id_reg.instruction,
         );
 
-        // 👇 [버그 픽스 1] Ghost Stall 무시: 어차피 점프(pcsrc)로 인해 버려질 명령어들이 만든 스톨은 무시합니다!
+        // Ghost Stall 무시: 어차피 점프(pcsrc)로 인해 버려질 명령어들이 만든 스톨은 무시합니다!
         if pcsrc {
             is_stall = false;
         }
@@ -187,7 +187,7 @@ impl Cpu {
         let rs1_data = self.regs.read(id_ex_reg.rs1);
         let rs2_data = self.regs.read(id_ex_reg.rs2);
 
-        // 👇 [버그 픽스 2] 무조건 점프(JAL) 중 rd=x0 인 경우 무시되는 것을 막기 위해 !control.jump 조건 추가
+        // 무조건 점프(JAL) 중 rd=x0 인 경우 무시되는 것을 막기 위해 !control.jump 조건 추가
         if !control.reg_write
             && !control.mem_write
             && !control.branch

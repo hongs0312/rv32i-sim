@@ -73,3 +73,15 @@ pub fn imm_gen(inst: u32) -> i32 {
         _ => 0, // 기본값: 0 (알 수 없는 명령어에 대해)
     }
 }
+
+#[test]
+fn decoder_test() {
+    let inst = 0b0000000_00001_00000_000_00000_0010011; // ADDI x0, x0, 1
+    let (funct7, rs2, rs1, funct3, rd, opcode) = Decoder::decode(inst);
+    assert_eq!(funct7, 0);
+    assert_eq!(rs2, 1);
+    assert_eq!(rs1, 0);
+    assert_eq!(funct3, 0);
+    assert_eq!(rd, 0);
+    assert_eq!(opcode, 0b0010011);
+}
