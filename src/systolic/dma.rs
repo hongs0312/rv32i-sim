@@ -43,7 +43,7 @@ impl SystolicDma {
         }
     }
 
-    pub fn start(&mut self, addr_a: u32, addr_b: u32) {
+    pub fn start_load(&mut self, addr_a: u32, addr_b: u32) {
         self.addr_a = addr_a;
         self.addr_b = addr_b;
 

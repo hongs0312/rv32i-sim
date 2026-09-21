@@ -62,8 +62,8 @@ impl SystolicArray {
             }
         }
 
-        // DMA 시작
-        self.dma.start(addr_a, addr_b);
+        // DMA 로드 시작
+        self.dma.start_load(addr_a, addr_b);
         self.state = SystolicState::Loading;
     }
 
