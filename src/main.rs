@@ -36,7 +36,7 @@ fn compile_and_extract(c_path: &str) -> Vec<u32> {
             "-O2",
             "-nostdlib",
             "-mabi=ilp32",
-            "-march=rv32i",
+            "-march=rv32im",
             "-mno-relax",
             // "-Ttext=0x0",
             "-T",
@@ -163,16 +163,35 @@ fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
             break;
         }
 
-        // 1. [가장 중요] ecall이 파이프라인 끝자락에 도달했는지 먼저 검사!
+        // 1. ecall이 파이프라인 끝자락에 도달했는지 먼저 검사!
         // WB 단계나 MEM 단계에 ecall이 있다면 정상 종료 절차를 밟음
         if cpu.mem_wb_reg.control.is_ecall || cpu.ex_mem_reg.control.is_ecall {
+            // let exit_code = cpu.regs.read(10); // a0 (x10)
+            // println!("\n{:=^70}", " Simulation Finished ");
+            // println!(
+            //     ">> Program exited gracefully with status code: {} (0x{:X})",
+            //     exit_code, exit_code
+            // );
+            // println!(">> Total executed cycles: {} cycles", cycle_count);
+            // break;
+
             let exit_code = cpu.regs.read(10); // a0 (x10)
+            let cpu_cycles = cpu.regs.read(11); // a1 (x11) - CPU 연산 사이클
+            let sys_cycles = cpu.regs.read(12); // a2 (x12) - 가속기 연산 사이클
+
             println!("\n{:=^70}", " Simulation Finished ");
-            println!(
-                ">> Program exited gracefully with status code: {} (0x{:X})",
-                exit_code, exit_code
-            );
-            println!(">> Total executed cycles: {} cycles", cycle_count);
+            println!(">> Program exited gracefully with status code: {} (0x{:X})", exit_code, exit_code);
+            println!(">> Total executed cycles (Simulator): {} cycles\n", cycle_count);
+            
+            println!("{:-^70}", " 벤치마크 결과 (16x16 행렬 곱셈) ");
+            println!(" - 순수 CPU (RV32IM) 소요 클럭  : {} cycles", cpu_cycles);
+            println!(" - 시스톨릭 어레이 가속 소요 클럭: {} cycles", sys_cycles);
+            
+            if sys_cycles > 0 {
+                println!(" => 성능 향상(Speedup)         : 약 {} 배 빠름!", cpu_cycles / sys_cycles);
+            }
+            println!("{:-^70}", "");
+            
             break;
         }
 
@@ -187,10 +206,13 @@ fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
 
         // 3. [안전장치 2] 뒤따라오는 쓰레기 명령어가 아닐 때만 메모리 에러 검출
         if cpu.ex_mem_reg.control.mem_read || cpu.ex_mem_reg.control.mem_write {
-            if cpu.ex_mem_reg.alu_result >= RAM_SIZE as u32 {
+            let addr = cpu.ex_mem_reg.alu_result;
+            
+            // 물리 RAM 범위를 벗어났으면서, 동시에 MMIO 대역(0x8000_0000 이상)도 아닌 경우에만 에러!
+            if addr >= RAM_SIZE as u32 && addr < 0x8000_0000 {
                 println!(
                     "\n[경고] 잘못된 메모리 접근 감지 (주소: 0x{:08X}).",
-                    cpu.ex_mem_reg.alu_result
+                    addr
                 );
                 println!(">> Total executed cycles: {} cycles", cycle_count);
                 break;
@@ -213,6 +235,10 @@ fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
 
         // 1클럭(사이클) 수행
         cpu.pipeline_step(false);
+
+        let bus = &mut cpu.bus;
+        bus.systolic.step(&mut bus.dram);
+
         cycle_count += 1;
     }
 }

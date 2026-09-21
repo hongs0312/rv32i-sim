@@ -1,4 +1,5 @@
 use crate::cpu::StageStatus;
+use crate::systolic::SystolicArray;
 use crate::memory::Dram;
 
 pub enum BusState {
@@ -9,6 +10,7 @@ pub enum BusState {
 pub struct Bus {
     pub dram: Dram,
     pub state: BusState,
+    pub systolic: SystolicArray,
 }
 
 impl Bus {
@@ -16,6 +18,7 @@ impl Bus {
         Self {
             dram,
             state: BusState::Ready,
+            systolic: SystolicArray::new(),
         }
     }
 
@@ -41,6 +44,16 @@ impl Bus {
     ) -> StageStatus<Result<u32, ()>> {
         if !is_read && !is_write {
             return StageStatus::Complete(Ok(0)); // 읽기/쓰기 모두 아닌 경우, 즉시 완료
+        }
+
+        // [MMIO 라우팅] 0x8000_0000 이상 주소는 DRAM 접근이 아닌 MMIO 접근으로 간주
+        if addr >= 0x8000_0000 {
+            if is_read {
+                return StageStatus::Complete(Ok(self.read_mmio(addr)));
+            } else {
+                // is_write
+                return StageStatus::Complete(self.write_mmio(addr, write_data));
+            }
         }
 
         let dram_latency = 5; // DRAM 접근 지연 사이클 수
@@ -94,5 +107,33 @@ impl Bus {
             0x2 => Ok(self.dram.store32(addr as usize, value)),
             _ => Err(()),
         }
+    }
+
+    fn read_mmio(&self, addr: u32) -> u32 {
+        match addr {
+            0x8000_0000 => self.systolic.status,
+            0x8000_0020 => self.systolic.global_time,
+            _ => 0, // 정의되지 않은 MMIO 주소는 0 반환
+        }
+    }
+
+    fn write_mmio(&mut self, addr: u32, value: u32) -> Result<u32, ()> {
+        match addr {
+            0x8000_0004 => self.systolic.dma.addr_a = value, // DMA 모듈로 바로 전달
+            0x8000_0008 => self.systolic.dma.addr_b = value,
+            0x8000_000C => self.systolic.addr_c = value,
+            0x8000_0010 => {
+                if value == 1 {
+                    // 시작 트리거!
+                    self.systolic.start(
+                        self.systolic.dma.addr_a, 
+                        self.systolic.dma.addr_b, 
+                        self.systolic.addr_c
+                    );
+                }
+            }
+            _ => return Err(()), // 정의되지 않은 MMIO 접근
+        }
+        Ok(0) // MMIO 쓰기 성공 시 0 반환
     }
 }

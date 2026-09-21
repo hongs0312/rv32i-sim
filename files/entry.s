@@ -3,7 +3,7 @@
 
 _start:
     .option push
-    .option norelex
+    .option norelax
 
     # 1. 스택 포인터 초기화 (16MB 상단)
     lui sp, 0x1000

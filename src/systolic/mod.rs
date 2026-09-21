@@ -31,6 +31,7 @@ pub struct SystolicArray {
     pub pes: [[ProcessingElement; ARRAY_SIZE]; ARRAY_SIZE],
 
     pub cycle: usize,
+    pub global_time: u32,
 }
 
 impl SystolicArray {
@@ -47,6 +48,7 @@ impl SystolicArray {
             pes: [[INIT_PE; ARRAY_SIZE]; ARRAY_SIZE],
 
             cycle: 0,
+            global_time: 0,
         }
     }
 
@@ -68,6 +70,8 @@ impl SystolicArray {
     }
 
     pub fn step(&mut self, dram: &mut Dram) {
+        self.global_time = self.global_time.wrapping_add(1);
+
         match self.state {
             SystolicState::Idle | SystolicState::Done => {}
 
