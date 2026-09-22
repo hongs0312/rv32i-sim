@@ -22,6 +22,14 @@ impl Dram {
         u32::from_le_bytes(bytes.try_into().expect("Slice with incorrect length"))
     }
 
+    // 캐시에 블록 단위로 데이터를 로드하는 메서드
+    pub fn load_block(&self, addr: usize) -> [u8; 16] {
+        let mut block = [0u8; 16];
+        block.copy_from_slice(&self.dram[addr..addr + 16]);
+
+        block
+    }
+
     // Store methods
     pub fn store8(&mut self, addr: usize, value: u8) {
         self.dram[addr] = value;
@@ -33,5 +41,10 @@ impl Dram {
     pub fn store32(&mut self, addr: usize, value: u32) {
         let bytes = value.to_le_bytes();
         self.dram[addr..addr + 4].copy_from_slice(&bytes);
+    }
+
+    // 캐시에 블록 단위로 데이터를 저장하는 메서드
+    pub fn store_block(&mut self, addr: usize, block: &[u8; 16]) {
+        self.dram[addr..addr + 16].copy_from_slice(block);
     }
 }
