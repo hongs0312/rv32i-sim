@@ -147,7 +147,6 @@ mod tests {
     #[test]
     fn test_systolic_array_mac() {
         // 1. Arrange: 메모리(Dram) 초기화 (예: 64KB 할당)
-        // 실제 Dram 구현체의 생성자 시그니처(Dram::new)에 맞게 수정해주세요.
         let mut dram = Dram::new(64 * 1024);
 
         let addr_a = 0x1000;

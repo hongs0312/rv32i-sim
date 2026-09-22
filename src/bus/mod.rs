@@ -1,6 +1,6 @@
 use crate::cpu::StageStatus;
-use crate::systolic::SystolicArray;
 use crate::memory::Dram;
+use crate::systolic::SystolicArray;
 
 pub enum BusState {
     Ready,
@@ -126,9 +126,9 @@ impl Bus {
                 if value == 1 {
                     // 시작 트리거!
                     self.systolic.start(
-                        self.systolic.dma.addr_a, 
-                        self.systolic.dma.addr_b, 
-                        self.systolic.addr_c
+                        self.systolic.dma.addr_a,
+                        self.systolic.dma.addr_b,
+                        self.systolic.addr_c,
                     );
                 }
             }
