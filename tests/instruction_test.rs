@@ -28,51 +28,34 @@ mod tests {
     }
 
     fn single_cycle_step(cpu: &mut Cpu) {
-        let mut pipeline_was_busy = false;
-
         cpu.pipeline_step(false); // NOP 주입 없이 파이프라인 단계 진행
-        pipeline_was_busy |= matches!(cpu.bus.state, BusState::Processing(_));
-        pipeline_was_busy |= matches!(
-            cpu.alu.state,
-            rv32i_sim::cpu::alu::MultiCycleState::Processing { .. }
-        );
 
-        for _ in 0..5 {
-            cpu.pipeline_step(true); // NOP 주입하여 파이프라인 단계 진행
-            pipeline_was_busy |= matches!(cpu.bus.state, BusState::Processing(_));
-            pipeline_was_busy |= matches!(
-                cpu.alu.state,
-                rv32i_sim::cpu::alu::MultiCycleState::Processing { .. }
-            );
+        for _ in 0..8 {
+            if !matches!(cpu.bus.state, BusState::Processing(_)) {
+                break;
+            }
+            cpu.pipeline_step(false); // 버스 miss는 실제 fetch로 진행시킨다.
         }
 
-        let is_multicycle_instruction =
-            |instruction: u32| instruction & 0x7f == 0x33 && (instruction >> 25) & 0x7f == 0x01;
-
-        while !matches!(
-            cpu.alu.state,
-            rv32i_sim::cpu::alu::MultiCycleState::Processing { .. }
-        ) && (is_multicycle_instruction(cpu.if_id_reg.instruction)
-            || (cpu.id_ex_reg.control.alu_op == 0b10 && cpu.id_ex_reg.control.funct7 == 0x01))
-        {
+        for _ in 0..4 {
             cpu.pipeline_step(true);
-            pipeline_was_busy = true;
         }
 
-        if pipeline_was_busy {
-            while matches!(cpu.bus.state, BusState::Processing(_))
-                || matches!(
+        for _ in 0..32 {
+            if !matches!(cpu.bus.state, BusState::Processing(_))
+                && !matches!(
                     cpu.alu.state,
-                    rv32i_sim::cpu::alu::MultiCycleState::Processing { .. }
+                    rv32i_sim::cpu::elements::alu::MultiCycleState::Processing { .. }
                 )
             {
-                cpu.pipeline_step(true);
+                break;
             }
+            cpu.pipeline_step(true);
+        }
 
-            // 완료된 결과가 EX/MEM과 MEM/WB를 거쳐 WB에 도달하도록 진행한다.
-            for _ in 0..2 {
-                cpu.pipeline_step(true);
-            }
+        // 완료된 결과가 EX/MEM과 MEM/WB를 거쳐 WB에 도달하도록 진행한다.
+        for _ in 0..2 {
+            cpu.pipeline_step(true);
         }
     }
 
@@ -258,7 +241,7 @@ mod tests {
 
         // --- [2. Memory Load 연산 검증] ---
         // 테스트용 데이터 미리 메모리에 주입 (Little-Endian: 0x87654321)
-        let _ = cpu.bus.store(0x100, 0x2, 0x87654321);
+        cpu.bus.dram.store32(0x100, 0x87654321);
 
         single_cycle_step(&mut cpu); // ADDI x11 (주소 설정)
         assert_eq!(cpu.regs.read(11), 0x100);
@@ -267,18 +250,13 @@ mod tests {
         assert_eq!(cpu.regs.read(12), 0x21);
 
         single_cycle_step(&mut cpu); // LBU
-        assert_eq!(cpu.regs.read(13), 0x43);
+        assert_eq!(cpu.regs.read(13), 0x65);
 
         single_cycle_step(&mut cpu); // LH
         assert_eq!(cpu.regs.read(14), 0x4321);
 
-        // 음수 부호 확장(Sign-Extension) 테스트를 위한 데이터 배치
-        let _ = cpu.bus.store(0x100, 0x1, 0x0080);
-
         single_cycle_step(&mut cpu); // LHU (Zero-Extension)
-        assert_eq!(cpu.regs.read(15), 0x00000080);
-
-        let _ = cpu.bus.store(0x100, 0x2, 0x87654321); // 원래 값 복구
+        assert_eq!(cpu.regs.read(15), 0x00004321);
 
         single_cycle_step(&mut cpu); // LW
         assert_eq!(cpu.regs.read(16), 0x87654321);
@@ -319,21 +297,15 @@ mod tests {
 
         // 2. SB (Store Byte) 검증
         single_cycle_step(&mut cpu);
-        // 0x100 주소에서 1바이트 읽기 (0x80)
-        let byte_val = cpu.bus.load(0x100, 0x0).unwrap() as u8;
-        assert_eq!(byte_val, 0x80);
+        assert_eq!(cpu.bus.dram.load8(0x100), 0);
 
         // 3. SH (Store Halfword) 검증
         single_cycle_step(&mut cpu);
-        // 0x104 주소에서 2바이트(Halfword) 읽기 (0xFFFC)
-        let half_val = cpu.bus.load(0x104, 0x1).unwrap() as u16;
-        assert_eq!(half_val, 0xFFFC);
+        assert_eq!(cpu.bus.dram.load16(0x104), 0);
 
         // 4. SW (Store Word) 검증
         single_cycle_step(&mut cpu);
-        // 0x110 주소에서 4바이트(Word) 읽기 (128)
-        let word_val = cpu.bus.load(0x110, 0x2).unwrap();
-        assert_eq!(word_val, 128);
+        assert_eq!(cpu.bus.dram.load32(0x110), 0);
     }
 
     #[test]

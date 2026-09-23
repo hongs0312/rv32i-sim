@@ -69,13 +69,35 @@ impl Bus {
         }
     }
 
-    // MMIO는 대기 없이 즉시 리턴 (기존 로직 유지)
     pub fn read_mmio(&self, addr: u32) -> u32 {
-        /* ... */
-        0
+        match addr {
+            0x8000_0000 => self.systolic.status,
+            0x8000_0020 => self.systolic.global_time,
+            _ => 0, // 정의되지 않은 MMIO 주소는 0 반환
+        }
     }
+
     pub fn write_mmio(&mut self, addr: u32, value: u32) -> Result<u32, ()> {
-        /* ... */
-        Ok(0)
+        match addr {
+            0x8000_0004 => self.systolic.dma.addr_a = value, // DMA 모듈로 바로 전달
+            0x8000_0008 => self.systolic.dma.addr_b = value,
+            0x8000_000C => self.systolic.addr_c = value,
+            0x8000_0010 => {
+                if value == 1 {
+                    // 시작 트리거!
+                    self.systolic.start(
+                        self.systolic.dma.addr_a,
+                        self.systolic.dma.addr_b,
+                        self.systolic.addr_c,
+                    );
+                }
+            }
+            _ => return Err(()), // 정의되지 않은 MMIO 접근
+        }
+        Ok(0) // MMIO 쓰기 성공 시 0 반환
+    }
+
+    pub fn reset(&mut self) {
+        self.state = BusState::Ready;
     }
 }

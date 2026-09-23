@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use rv32i_sim::cpu::StageStatus;
-    use rv32i_sim::cpu::alu::Alu;
-    use rv32i_sim::cpu::decoder::*;
+    use rv32i_sim::cpu::elements::{alu::Alu, decoder::*};
+    use rv32i_sim::cpu::pipeline_stage::StageStatus;
 
     #[test]
     fn alutest() {
@@ -223,20 +222,20 @@ mod tests {
     fn imm_gen_test() {
         // Test I-Type
         let inst_i = 0b000000000001_00000_000_00000_0010011; // ADDI x0, x0, 1
-        assert_eq!(imm_gen(inst_i), 1);
+        assert_eq!(Decoder::imm_gen(inst_i), 1);
 
         // Test S-Type
         let inst_s = 0b0000000_00001_00000_010_00000_0100011; // SW x1, 0(x0)
-        assert_eq!(imm_gen(inst_s), 0);
+        assert_eq!(Decoder::imm_gen(inst_s), 0);
 
         // Test B-Type
         let inst_b = 0b0000000_00001_00000_000_00000_1100011; // BEQ x0, x1, 0
-        assert_eq!(imm_gen(inst_b), 0);
+        assert_eq!(Decoder::imm_gen(inst_b), 0);
     }
 
     #[test]
     fn register_file_test() {
-        let mut regs = rv32i_sim::cpu::register::RegisterFile::new();
+        let mut regs = rv32i_sim::cpu::elements::register::RegisterFile::new();
 
         // Test writing to a register
         regs.write(1, 42, true);

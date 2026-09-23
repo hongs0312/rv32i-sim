@@ -1,8 +1,5 @@
 use crate::cpu::Cpu;
-use crate::cpu::elements::{
-    control::get_control_signals,
-    decoder::{Decoder, imm_gen},
-};
+use crate::cpu::elements::{control::control_unit::ControlUnit, decoder::Decoder};
 
 use super::{IdExRegister, IfIdRegister};
 
@@ -12,9 +9,9 @@ pub fn execute(cpu: &mut Cpu, if_id_reg: IfIdRegister) -> IdExRegister {
 
     let rs1_data = cpu.regs.read(rs1);
     let rs2_data = cpu.regs.read(rs2);
-    let imm = imm_gen(instruction);
+    let imm = Decoder::imm_gen(instruction);
 
-    let control = get_control_signals(opcode, funct3, funct7);
+    let control = ControlUnit::decode(opcode, funct3, funct7);
 
     IdExRegister {
         control,

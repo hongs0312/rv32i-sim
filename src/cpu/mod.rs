@@ -3,21 +3,18 @@
     - CPU는 5단계 파이프라인 구조를 가지며, 각 단계는 별도의 레지스터를 사용하여 데이터를 전달함
 */
 
-pub mod cache;
 pub mod elements;
 pub mod pipeline_stage;
 
 use crate::bus::Bus;
 
-use cache::L1Cache;
+use elements::{
+    alu::Alu, cache::L1Cache, control::branch_controller::BranchController,
+    hazard_detection_unit::HazardDetectionUnit, register::RegisterFile,
+};
 
-use elements::alu::Alu;
-use elements::branch::get_branch_condition;
-use elements::hazard_detection_unit::*;
-use elements::register::*;
-
-use pipeline_stage::{instruction_fetch, instruction_decode, execute, memory_access, write_back};
 use pipeline_stage::{ExMemRegister, IdExRegister, IfIdRegister, MemWbRegister, StageStatus};
+use pipeline_stage::{execute, instruction_decode, instruction_fetch, memory_access, write_back};
 
 pub struct Cpu {
     pub pc: u32,
@@ -75,7 +72,11 @@ impl Cpu {
         let (next_ex_mem_reg, pcsrc, branch_target) = match ex_status {
             StageStatus::Complete(ex_reg) => {
                 let branch_taken = ex_reg.control.branch
-                    && get_branch_condition(ex_reg.alu_result, ex_reg.zero, ex_reg.control.funct3);
+                    && BranchController::get_branch_condition(
+                        ex_reg.alu_result,
+                        ex_reg.zero,
+                        ex_reg.control.funct3,
+                    );
 
                 let is_pcsrc = ex_reg.control.jump || branch_taken;
 
@@ -85,16 +86,11 @@ impl Cpu {
         };
 
         // 4. 앞단 실행 (ID, IF)
-        let mut is_stall = HazardDetectionUnit::check_load_use(
+        let is_stall = HazardDetectionUnit::check_load_use(
             self.id_ex_reg.control.mem_read,
             self.id_ex_reg.rd,
             self.if_id_reg.instruction,
         );
-
-        // Ghost Stall 무시: 어차피 점프(pcsrc)로 인해 버려질 명령어들이 만든 스톨은 무시합니다!
-        if pcsrc {
-            is_stall = false;
-        }
 
         let next_id_ex_reg = self.instruction_decode(self.if_id_reg);
 
@@ -106,27 +102,44 @@ impl Cpu {
             StageStatus::Busy => IfIdRegister::default(), // 스톨 시 NOP처럼 동작
         };
 
-        let freeze_all = is_mem_busy || is_ex_busy || is_if_busy || is_stall;
-        let freeze_ex = is_mem_busy || is_ex_busy;
+        // let freeze_all = is_mem_busy || is_ex_busy || is_if_busy || is_stall;
+        // let freeze_ex = is_mem_busy || is_ex_busy;
 
-        // 5. 래치 업데이트
-        if !freeze_all {
-            self.update_pc(branch_target, pcsrc, inject_nop);
+        let stall_mem = is_mem_busy;
+        let stall_ex = is_mem_busy || is_ex_busy;
+        let stall_id = stall_ex || is_stall;
+        let stall_if = stall_id || is_if_busy;
 
-            self.if_id_reg = match pcsrc {
-                true => IfIdRegister::default(),
-                false => next_if_id_reg,
-            };
+        // Ghost Stall 무시: 어차피 점프(pcsrc)로 인해 버려질 명령어들이 만든 스톨은 무시합니다!
+        if pcsrc { // 분기/점프 발생 시 스톨 무시
+            self.pc = branch_target;
+            self.if_id_reg = IfIdRegister::default();
+            self.id_ex_reg = IdExRegister::default();
+
+            self.i_cache.reset();
+            self.bus.reset();
+        } else {
+            // 5. 래치 업데이트
+           if !stall_if && !inject_nop {
+                self.pc = self.pc.wrapping_add(4);
+            }
+
+            if !stall_id {
+                self.if_id_reg = match is_if_busy {
+                    true => IfIdRegister::default(), // 스톨 시 NOP처럼 동작
+                    false => next_if_id_reg,
+                };
+            }
+            
+            if !stall_ex {
+                self.id_ex_reg = match is_stall {
+                    true => IdExRegister::default(), // 스톨 시 NOP처럼 동작
+                    false => next_id_ex_reg,
+                };
+            }
         }
 
-        if !freeze_ex {
-            self.id_ex_reg = match pcsrc || is_stall {
-                true => IdExRegister::default(),
-                false => next_id_ex_reg,
-            };
-        }
-
-        if !is_mem_busy {
+        if !stall_mem {
             self.ex_mem_reg = match is_ex_busy {
                 true => ExMemRegister::default(),
                 false => next_ex_mem_reg,
@@ -137,14 +150,6 @@ impl Cpu {
             true => MemWbRegister::default(),
             false => next_mem_wb_reg,
         };
-    }
-
-    fn update_pc(&mut self, branch_target: u32, pcsrc: bool, inject_nop: bool) {
-        if pcsrc {
-            self.pc = branch_target;
-        } else if !inject_nop {
-            self.pc = self.pc.wrapping_add(4);
-        }
     }
 
     // 파이프라인 단계별 실행 메서드
