@@ -4,8 +4,7 @@
     OS방식으로 구현된 systolic array에서는 데이터의 입력을 delay를 고려하여 처리해야 하므로, 이를 위해 LineBuffer를 사용합니다.
 */
 
-use crate::systolic::linebuffer::{LineBuffer, StreamValue};
-
+use super::linebuffer::{LineBuffer, StreamValue};
 use super::{ARRAY_SIZE, INNER_DIM};
 
 pub struct Scratchpad {

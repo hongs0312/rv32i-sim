@@ -1,4 +1,4 @@
-use crate::cpu::Cpu;
+use crate::hardware::cpu::Cpu;
 
 use super::MemWbRegister;
 

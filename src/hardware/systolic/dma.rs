@@ -5,7 +5,7 @@
     시스템 메모리로부터 Systolic Array로 데이터를 로드하는 모듈
 */
 
-use crate::memory::Dram;
+use crate::hardware::memory::Dram;
 
 use super::{ARRAY_SIZE, INNER_DIM};
 

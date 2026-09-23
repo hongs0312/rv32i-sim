@@ -1,5 +1,5 @@
 use super::{ExMemRegister, MemWbRegister, StageStatus};
-use crate::cpu::Cpu;
+use crate::hardware::cpu::Cpu;
 
 pub fn execute(cpu: &mut Cpu, ex_mem_reg: ExMemRegister) -> StageStatus<MemWbRegister> {
     let control = ex_mem_reg.control;

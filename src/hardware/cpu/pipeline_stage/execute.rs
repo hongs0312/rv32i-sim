@@ -1,5 +1,5 @@
-use crate::cpu::Cpu;
-use crate::cpu::elements::forwarding_unit::{ForwardA, ForwardB, ForwardingUnit};
+use crate::hardware::cpu::Cpu;
+use crate::hardware::cpu::elements::forwarding_unit::{ForwardA, ForwardB, ForwardingUnit};
 
 use super::{ExMemRegister, IdExRegister, MemWbRegister, StageStatus};
 

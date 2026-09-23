@@ -8,7 +8,7 @@
 
 // // 고유한 ALU 제어 신호 정의
 
-use crate::cpu::StageStatus;
+use crate::hardware::cpu::StageStatus;
 
 #[rustfmt::skip]
 enum AluControl {

@@ -1,6 +1,6 @@
-use crate::cpu::pipeline_stage::StageStatus;
-use crate::memory::Dram;
-use crate::systolic::SystolicArray;
+use crate::hardware::cpu::pipeline_stage::StageStatus;
+use crate::hardware::memory::Dram;
+use crate::hardware::systolic::SystolicArray;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum BusState {

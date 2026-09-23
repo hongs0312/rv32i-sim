@@ -6,7 +6,7 @@
 pub mod elements;
 pub mod pipeline_stage;
 
-use crate::bus::Bus;
+use crate::hardware::bus::Bus;
 
 use elements::{
     alu::Alu, cache::L1Cache, control::branch_controller::BranchController,
@@ -111,7 +111,8 @@ impl Cpu {
         let stall_if = stall_id || is_if_busy;
 
         // Ghost Stall 무시: 어차피 점프(pcsrc)로 인해 버려질 명령어들이 만든 스톨은 무시합니다!
-        if pcsrc { // 분기/점프 발생 시 스톨 무시
+        if pcsrc {
+            // 분기/점프 발생 시 스톨 무시
             self.pc = branch_target;
             self.if_id_reg = IfIdRegister::default();
             self.id_ex_reg = IdExRegister::default();
@@ -120,7 +121,7 @@ impl Cpu {
             self.bus.reset();
         } else {
             // 5. 래치 업데이트
-           if !stall_if && !inject_nop {
+            if !stall_if && !inject_nop {
                 self.pc = self.pc.wrapping_add(4);
             }
 
@@ -130,7 +131,7 @@ impl Cpu {
                     false => next_if_id_reg,
                 };
             }
-            
+
             if !stall_ex {
                 self.id_ex_reg = match is_stall {
                     true => IdExRegister::default(), // 스톨 시 NOP처럼 동작

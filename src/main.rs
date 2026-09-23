@@ -1,10 +1,6 @@
 use clap::Parser;
-use rv32i_sim::bus::Bus;
-use rv32i_sim::cpu::Cpu;
-use rv32i_sim::memory::Dram;
-use std::fs;
-use std::path::Path;
-use std::process::Command;
+use rv32i_sim::hardware::{bus::Bus, cpu::Cpu, memory::Dram};
+use std::{fs, path::Path, process::Command};
 
 const RAM_SIZE: usize = 16 * 1024 * 1024; // 16MB
 

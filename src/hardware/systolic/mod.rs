@@ -3,7 +3,7 @@ pub mod linebuffer;
 pub mod processing_element;
 pub mod scratchpad;
 
-use crate::memory::Dram;
+use crate::hardware::memory::Dram;
 
 use dma::{DmaState, SystolicDma};
 use processing_element::ProcessingElement;
@@ -142,7 +142,6 @@ impl SystolicArray {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory::Dram; // 실제 프로젝트 경로에 맞게 수정하세요
 
     #[test]
     fn test_systolic_array_mac() {

@@ -1,4 +1,4 @@
-use crate::cpu::pipeline_stage::{IdExRegister, MemWbRegister};
+use crate::hardware::cpu::pipeline_stage::{IdExRegister, MemWbRegister};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ForwardA {
