@@ -1,6 +1,6 @@
 mod cache_line;
 
-use crate::hardware::{bus::Bus, cpu::StageStatus};
+use crate::hardware::{bus::SystemBus, cpu::StageStatus};
 use cache_line::CacheLine;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -23,7 +23,7 @@ impl L1Cache {
         }
     }
 
-    pub fn read(&mut self, addr: u32, bus: &mut Bus) -> StageStatus<u32> {
+    pub fn read(&mut self, addr: u32, bus: &mut SystemBus) -> StageStatus<u32> {
         let offset = (addr & 0xF) as usize;
         let index = ((addr >> 4) & 0x3F) as usize;
         let tag = addr >> 10;
@@ -72,7 +72,13 @@ impl L1Cache {
         StageStatus::Busy // 아직 완료되지 않은 경우
     }
 
-    pub fn write(&mut self, addr: u32, value: u32, funct3: u8, bus: &mut Bus) -> StageStatus<u32> {
+    pub fn write(
+        &mut self,
+        addr: u32,
+        value: u32,
+        funct3: u8,
+        bus: &mut SystemBus,
+    ) -> StageStatus<u32> {
         let offset = (addr & 0xF) as usize;
         let index = ((addr >> 4) & 0x3F) as usize;
         let tag = addr >> 10;

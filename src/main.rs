@@ -1,5 +1,5 @@
 use clap::Parser;
-use rv32i_sim::hardware::{bus::Bus, cpu::Cpu, memory::Dram};
+use rv32i_sim::hardware::soc::SoC;
 use std::{fs, path::Path, process::Command};
 
 const RAM_SIZE: usize = 16 * 1024 * 1024; // 16MB
@@ -34,7 +34,6 @@ fn compile_and_extract(c_path: &str) -> Vec<u32> {
             "-mabi=ilp32",
             "-march=rv32im",
             "-mno-relax",
-            // "-Ttext=0x0",
             "-T",
             "files/linker.ld",
             "files/entry.s",
@@ -69,26 +68,23 @@ fn compile_and_extract(c_path: &str) -> Vec<u32> {
         .collect()
 }
 
-fn setup_cpu(program: &[u32]) -> Cpu {
+fn setup_cpu(program: &[u32]) -> SoC {
     println!("[2/3] CPU 및 16MB DRAM 초기화 중...");
-    let mut dram = Dram::new(RAM_SIZE);
+    let mut soc = SoC::new(RAM_SIZE);
 
     for (i, &inst) in program.iter().enumerate() {
         let bytes = inst.to_le_bytes();
         let addr = i * 4;
-        dram.dram[addr] = bytes[0];
-        dram.dram[addr + 1] = bytes[1];
-        dram.dram[addr + 2] = bytes[2];
-        dram.dram[addr + 3] = bytes[3];
+        soc.dram.dram[addr] = bytes[0];
+        soc.dram.dram[addr + 1] = bytes[1];
+        soc.dram.dram[addr + 2] = bytes[2];
+        soc.dram.dram[addr + 3] = bytes[3];
     }
 
-    let bus = Bus::new(dram);
-    let cpu = Cpu::new(bus);
-
-    cpu
+    soc
 }
 
-fn run_single_cycle_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
+fn run_single_cycle_simulation(mut soc: SoC, verbose: bool, max_steps: usize) {
     println!("[3/3] 싱글사이클 시뮬레이션 시작\n");
     println!("{:=^70}", " Simulation Running ");
 
@@ -104,10 +100,10 @@ fn run_single_cycle_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
         }
 
         // 1. [안전장치] PC가 범위를 벗어났는지 확인
-        if cpu.pc >= RAM_SIZE as u32 {
+        if soc.cpu.pc >= RAM_SIZE as u32 {
             println!(
                 "\n[경고] PC(0x{:08X})가 메모리 범위를 벗어났습니다. 비정상 종료를 감지하고 시뮬레이션을 중단합니다.",
-                cpu.pc
+                soc.cpu.pc
             );
             break;
         }
@@ -116,20 +112,20 @@ fn run_single_cycle_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
             println!(
                 "[{:05} Cycle] PC: 0x{:08X} | sp: 0x{:08X} | a0: {} | s0: {} | s5: {}",
                 cycle_count,
-                cpu.pc,
-                cpu.regs.read(2),
-                cpu.regs.read(10),
-                cpu.regs.read(8),
-                cpu.regs.read(15)
+                soc.cpu.pc,
+                soc.cpu.regs.read(2),
+                soc.cpu.regs.read(10),
+                soc.cpu.regs.read(8),
+                soc.cpu.regs.read(15)
             );
         }
 
-        cpu.pipeline_step(false);
+        soc.tick_with(false);
         cycle_count += 1;
 
         // ecall fetch 시점에서 종료 조건 확인
-        if cpu.if_id_reg.instruction == 0x00000073 {
-            let exit_code = cpu.regs.read(10); // a0 (x10)
+        if soc.cpu.if_id_reg.instruction == 0x00000073 {
+            let exit_code = soc.cpu.regs.read(10); // a0 (x10)
             println!("\n{:=^70}", " Simulation Finished ");
             println!(
                 ">> Program exited gracefully with status code: {} (0x{:X})",
@@ -141,13 +137,13 @@ fn run_single_cycle_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
 
         // 충분한 사이클 동안 파이프라인 펌핑 (NOP 주입)
         for _ in 0..4 {
-            cpu.pipeline_step(true);
+            soc.tick_with(true);
             cycle_count += 1;
         }
     }
 }
 
-fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
+fn run_pipline_simulation(mut soc: SoC, verbose: bool, max_steps: usize) {
     println!("[3/3] 파이프라인 시뮬레이션 시작\n");
     println!("{:=^70}", " Simulation Running ");
 
@@ -161,7 +157,7 @@ fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
 
         // 1. ecall이 파이프라인 끝자락에 도달했는지 먼저 검사!
         // WB 단계나 MEM 단계에 ecall이 있다면 정상 종료 절차를 밟음
-        if cpu.mem_wb_reg.control.is_ecall || cpu.ex_mem_reg.control.is_ecall {
+        if soc.cpu.mem_wb_reg.control.is_ecall || soc.cpu.ex_mem_reg.control.is_ecall {
             // let exit_code = cpu.regs.read(10); // a0 (x10)
             // println!("\n{:=^70}", " Simulation Finished ");
             // println!(
@@ -171,9 +167,9 @@ fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
             // println!(">> Total executed cycles: {} cycles", cycle_count);
             // break;
 
-            let exit_code = cpu.regs.read(10); // a0 (x10)
-            let cpu_cycles = cpu.regs.read(11); // a1 (x11) - CPU 연산 사이클
-            let sys_cycles = cpu.regs.read(12); // a2 (x12) - 가속기 연산 사이클
+            let exit_code = soc.cpu.regs.read(10); // a0 (x10)
+            let cpu_cycles = soc.cpu.regs.read(11); // a1 (x11) - CPU 연산 사이클
+            let sys_cycles = soc.cpu.regs.read(12); // a2 (x12) - 가속기 연산 사이클
 
             println!("\n{:=^70}", " Simulation Finished ");
             println!(
@@ -201,17 +197,17 @@ fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
         }
 
         // 2. [안전장치 1] PC 메모리 범위 이탈 확인
-        if cpu.pc >= RAM_SIZE as u32 {
+        if soc.cpu.pc >= RAM_SIZE as u32 {
             println!(
                 "\n[경고] PC(0x{:08X})가 메모리 범위를 벗어났습니다.",
-                cpu.pc
+                soc.cpu.pc
             );
             break;
         }
 
         // 3. [안전장치 2] 뒤따라오는 쓰레기 명령어가 아닐 때만 메모리 에러 검출
-        if cpu.ex_mem_reg.control.mem_read || cpu.ex_mem_reg.control.mem_write {
-            let addr = cpu.ex_mem_reg.alu_result;
+        if soc.cpu.ex_mem_reg.control.mem_read || soc.cpu.ex_mem_reg.control.mem_write {
+            let addr = soc.cpu.ex_mem_reg.alu_result;
 
             // 물리 RAM 범위를 벗어났으면서, 동시에 MMIO 대역(0x8000_0000 이상)도 아닌 경우에만 에러!
             if addr >= RAM_SIZE as u32 && addr < 0x8000_0000 {
@@ -225,21 +221,18 @@ fn run_pipline_simulation(mut cpu: Cpu, verbose: bool, max_steps: usize) {
             println!(
                 "[{:05} Cycle] IF_PC: 0x{:08X} | ID_PC: 0x{:08X} | EX_PC: 0x{:08X} | sp: 0x{:08X} | a0: {} | s0: {} | s5: {}",
                 cycle_count,
-                cpu.pc,
-                cpu.if_id_reg.pc,
-                cpu.id_ex_reg.pc,
-                cpu.regs.read(2),
-                cpu.regs.read(10),
-                cpu.regs.read(8),
-                cpu.regs.read(15)
+                soc.cpu.pc,
+                soc.cpu.if_id_reg.pc,
+                soc.cpu.id_ex_reg.pc,
+                soc.cpu.regs.read(2),
+                soc.cpu.regs.read(10),
+                soc.cpu.regs.read(8),
+                soc.cpu.regs.read(15)
             );
         }
 
         // 1클럭(사이클) 수행
-        cpu.pipeline_step(false);
-
-        let bus = &mut cpu.bus;
-        bus.systolic.step(&mut bus.dram);
+        soc.tick();
 
         cycle_count += 1;
     }

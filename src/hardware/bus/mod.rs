@@ -8,22 +8,33 @@ pub enum BusState {
     Processing(u32), // 남은 대기 사이클
 }
 
-pub struct Bus {
-    pub dram: Dram,
+pub struct SystemBus<'a> {
     pub state: BusState,
-    pub systolic: SystolicArray,
+    pub dram: &'a mut Dram,
+    pub systolic: Option<&'a mut SystolicArray>,
 }
 
-impl Bus {
-    pub fn new(dram: Dram) -> Self {
+impl<'a> SystemBus<'a> {
+    pub fn memory(state: BusState, dram: &'a mut Dram) -> Self {
         Self {
+            state,
             dram,
-            state: BusState::Ready,
-            systolic: SystolicArray::new(),
+            systolic: None,
         }
     }
 
-    // 캐시에서 16바이트 블록 로드를 요청할 때 사용
+    pub fn with_systolic(
+        state: BusState,
+        dram: &'a mut Dram,
+        systolic: &'a mut SystolicArray,
+    ) -> Self {
+        Self {
+            state,
+            dram,
+            systolic: Some(systolic),
+        }
+    }
+
     pub fn read_block(&mut self, addr: u32) -> StageStatus<[u8; 16]> {
         let base_addr = (addr & !0xF) as usize;
 
@@ -47,7 +58,6 @@ impl Bus {
         }
     }
 
-    // 캐시 Eviction 시 블록을 DRAM에 쓸 때 사용
     pub fn write_block(&mut self, addr: u32, block: &[u8; 16]) -> StageStatus<()> {
         let base_addr = (addr & !0xF) as usize;
 
@@ -69,32 +79,77 @@ impl Bus {
         }
     }
 
-    pub fn read_mmio(&self, addr: u32) -> u32 {
-        match addr {
-            0x8000_0000 => self.systolic.status,
-            0x8000_0020 => self.systolic.global_time,
-            _ => 0, // 정의되지 않은 MMIO 주소는 0 반환
+    pub fn read_word(&mut self, addr: u32) -> StageStatus<u32> {
+        match self.read_block(addr) {
+            StageStatus::Busy => StageStatus::Busy,
+            StageStatus::Complete(block) => {
+                let offset = (addr & 0xF) as usize;
+                StageStatus::Complete(u32::from_le_bytes(
+                    block[offset..offset + 4].try_into().unwrap(),
+                ))
+            }
         }
     }
 
-    pub fn write_mmio(&mut self, addr: u32, value: u32) -> Result<u32, ()> {
+    pub fn write_word(&mut self, addr: u32, value: u32) -> StageStatus<()> {
+        let address = addr as usize;
+
+        match self.state {
+            BusState::Ready => {
+                self.state = BusState::Processing(4);
+                StageStatus::Busy
+            }
+            BusState::Processing(cycles_left) => {
+                if cycles_left > 1 {
+                    self.state = BusState::Processing(cycles_left - 1);
+                    StageStatus::Busy
+                } else {
+                    self.state = BusState::Ready;
+                    self.dram.dram[address..address + 4].copy_from_slice(&value.to_le_bytes());
+                    StageStatus::Complete(())
+                }
+            }
+        }
+    }
+
+    // MMIO 읽기 (Systolic 참조 필요)
+    pub fn read_mmio(&self, addr: u32) -> u32 {
+        let systolic = self.systolic.as_deref().expect("MMIO requires systolic device");
         match addr {
-            0x8000_0004 => self.systolic.dma.addr_a = value, // DMA 모듈로 바로 전달
-            0x8000_0008 => self.systolic.dma.addr_b = value,
-            0x8000_000C => self.systolic.addr_c = value,
+            0x8000_0000 => systolic.status,
+            0x8000_0020 => systolic.global_time,
+            _ => 0, // 정의되지 않은 MMIO 주소
+        }
+    }
+
+    // MMIO 쓰기 (Systolic 가변 참조 필요)
+    pub fn write_mmio(
+        &mut self,
+        addr: u32,
+        value: u32,
+    ) -> Result<u32, ()> {
+        let systolic = self
+            .systolic
+            .as_deref_mut()
+            .expect("MMIO requires systolic device");
+
+        match addr {
+            0x8000_0004 => systolic.dma.addr_a = value,
+            0x8000_0008 => systolic.dma.addr_b = value,
+            0x8000_000C => systolic.addr_c = value,
             0x8000_0010 => {
                 if value == 1 {
                     // 시작 트리거!
-                    self.systolic.start(
-                        self.systolic.dma.addr_a,
-                        self.systolic.dma.addr_b,
-                        self.systolic.addr_c,
+                    systolic.start(
+                        systolic.dma.addr_a,
+                        systolic.dma.addr_b,
+                        systolic.addr_c,
                     );
                 }
             }
-            _ => return Err(()), // 정의되지 않은 MMIO 접근
+            _ => return Err(()),
         }
-        Ok(0) // MMIO 쓰기 성공 시 0 반환
+        Ok(0)
     }
 
     pub fn reset(&mut self) {

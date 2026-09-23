@@ -3,7 +3,7 @@ pub mod linebuffer;
 pub mod processing_element;
 pub mod scratchpad;
 
-use crate::hardware::memory::Dram;
+use crate::hardware::bus::SystemBus;
 
 use dma::{DmaState, SystolicDma};
 use processing_element::ProcessingElement;
@@ -69,14 +69,14 @@ impl SystolicArray {
         self.state = SystolicState::Loading;
     }
 
-    pub fn step(&mut self, dram: &mut Dram) {
+    pub fn step(&mut self, bus: &mut SystemBus) {
         self.global_time = self.global_time.wrapping_add(1);
 
         match self.state {
             SystolicState::Idle | SystolicState::Done => {}
 
             SystolicState::Loading => {
-                self.dma.step(dram);
+                self.dma.step(bus);
 
                 if self.dma.state == DmaState::Done {
                     self.scratchpad.load_a(self.dma.temp_a);
@@ -127,7 +127,7 @@ impl SystolicArray {
 
             SystolicState::Storing => {
                 if let Some((row, col)) = self.dma.store_position() {
-                    self.dma.store_step(dram, self.pes[row][col].psum as u32);
+                    self.dma.store_step(bus, self.pes[row][col].psum as u32);
                 }
 
                 if self.dma.state == DmaState::Done {
@@ -142,11 +142,14 @@ impl SystolicArray {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hardware::bus::BusState;
+    use crate::hardware::memory::Dram;
 
     #[test]
     fn test_systolic_array_mac() {
         // 1. Arrange: 메모리(Dram) 초기화 (예: 64KB 할당)
         let mut dram = Dram::new(64 * 1024);
+        let mut bus_state = BusState::Ready;
 
         let addr_a = 0x1000;
         let addr_b = 0x2000;
@@ -175,13 +178,15 @@ mod tests {
         // 상태가 완료(2)가 될 때까지 사이클을 진행 (클럭 에뮬레이션)
         let mut total_cycles = 0;
         while systolic.status != 2 {
-            systolic.step(&mut dram);
+            let mut system_bus = SystemBus::memory(bus_state, &mut dram);
+            systolic.step(&mut system_bus);
+            bus_state = system_bus.state;
             total_cycles += 1;
 
             // 무한 루프(Deadlock) 방지용 타임아웃
-            // 로드(16*16*2) + 연산파도(16+16+16) + 저장(16*16) + 레이턴시 여유 = 약 1000 사이클 내외
+            // 각 DMA 워드가 시스템 버스 지연을 거치므로 직접 DRAM 접근보다 오래 걸립니다.
             assert!(
-                total_cycles < 2000,
+                total_cycles < 10000,
                 "Simulation timed out! Pipeline stalled."
             );
         }

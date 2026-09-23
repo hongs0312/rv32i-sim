@@ -5,7 +5,8 @@
     시스템 메모리로부터 Systolic Array로 데이터를 로드하는 모듈
 */
 
-use crate::hardware::memory::Dram;
+use crate::hardware::bus::SystemBus;
+use crate::hardware::cpu::pipeline_stage::StageStatus;
 
 use super::{ARRAY_SIZE, INNER_DIM};
 
@@ -65,13 +66,18 @@ impl SystolicDma {
         }
     }
 
-    pub fn store_step(&mut self, dram: &mut Dram, value: u32) {
+    pub fn store_step(&mut self, bus: &mut SystemBus, value: u32) {
         let DmaState::StoringC { row, col } = self.state else {
             return;
         };
 
         let offset = (row * ARRAY_SIZE + col) * 4;
-        dram.store32((self.addr_c + offset as u32) as usize, value);
+        if !matches!(
+            bus.write_word(self.addr_c + offset as u32, value),
+            StageStatus::Complete(())
+        ) {
+            return;
+        }
 
         let next_col = col + 1;
         if next_col >= ARRAY_SIZE {
@@ -89,7 +95,7 @@ impl SystolicDma {
         }
     }
 
-    pub fn step(&mut self, dram: &Dram) {
+    pub fn step(&mut self, bus: &mut SystemBus) {
         match self.state {
             DmaState::Idle | DmaState::Done | DmaState::StoringC { .. } => {}
 
@@ -111,7 +117,11 @@ impl SystolicDma {
             DmaState::Bursting { is_a, row, col } => {
                 if is_a {
                     let offset = (row * INNER_DIM + col) * 4;
-                    self.temp_a[row][col] = dram.load32((self.addr_a + offset as u32) as usize);
+                    let result = bus.read_word(self.addr_a + offset as u32);
+                    let StageStatus::Complete(value) = result else {
+                        return;
+                    };
+                    self.temp_a[row][col] = value;
 
                     let next_col = col + 1;
                     if next_col >= INNER_DIM {
@@ -137,7 +147,11 @@ impl SystolicDma {
                     }
                 } else {
                     let offset = (row * ARRAY_SIZE + col) * 4;
-                    self.temp_b[col][row] = dram.load32((self.addr_b + offset as u32) as usize);
+                    let result = bus.read_word(self.addr_b + offset as u32);
+                    let StageStatus::Complete(value) = result else {
+                        return;
+                    };
+                    self.temp_b[col][row] = value;
 
                     let next_col = col + 1;
                     if next_col >= ARRAY_SIZE {

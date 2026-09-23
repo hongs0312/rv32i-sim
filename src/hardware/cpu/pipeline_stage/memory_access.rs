@@ -1,7 +1,12 @@
 use super::{ExMemRegister, MemWbRegister, StageStatus};
+use crate::hardware::bus::SystemBus;
 use crate::hardware::cpu::Cpu;
 
-pub fn execute(cpu: &mut Cpu, ex_mem_reg: ExMemRegister) -> StageStatus<MemWbRegister> {
+pub fn execute(
+    cpu: &mut Cpu,
+    bus: &mut SystemBus,
+    ex_mem_reg: ExMemRegister,
+) -> StageStatus<MemWbRegister> {
     let control = ex_mem_reg.control;
     let addr = ex_mem_reg.alu_result;
 
@@ -20,9 +25,9 @@ pub fn execute(cpu: &mut Cpu, ex_mem_reg: ExMemRegister) -> StageStatus<MemWbReg
         let mut mem_data = 0;
 
         if control.mem_write {
-            let _ = cpu.bus.write_mmio(addr, ex_mem_reg.rs2_data);
+            let _ = bus.write_mmio(addr, ex_mem_reg.rs2_data);
         } else if control.mem_read {
-            mem_data = cpu.bus.read_mmio(addr);
+            mem_data = bus.read_mmio(addr);
         }
 
         return StageStatus::Complete(MemWbRegister {
@@ -35,10 +40,10 @@ pub fn execute(cpu: &mut Cpu, ex_mem_reg: ExMemRegister) -> StageStatus<MemWbReg
 
     // 3. 일반 메모리 접근 (D-Cache 사용)
     let cache_status = match control.mem_read {
-        true => cpu.d_cache.read(addr, &mut cpu.bus),
+        true => cpu.d_cache.read(addr, bus),
         false => cpu
             .d_cache
-            .write(addr, ex_mem_reg.rs2_data, control.funct3, &mut cpu.bus),
+            .write(addr, ex_mem_reg.rs2_data, control.funct3, bus),
     };
 
     match cache_status {
