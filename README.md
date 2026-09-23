@@ -76,8 +76,8 @@ The accelerator is mapped to the >= 0x8000_0000 memory address space.
 | `0x8000_0010` | `START`  | W      | Write `1` to trigger DMA and computation |
 | `0x8000_0020` | `TIMER`  | R      | Global hardware cycle counter            |
 
-```C-Code Example
-
+C-Code Example
+```
 #define SYSTOLIC_STATUS (*(volatile unsigned int*)0x80000000)
 #define SYSTOLIC_ADDR_A (*(volatile unsigned int*)0x80000004)
 #define SYSTOLIC_ADDR_B (*(volatile unsigned int*)0x80000008)
