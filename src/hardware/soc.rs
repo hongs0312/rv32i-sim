@@ -1,23 +1,24 @@
 // src/hardware/soc.rs
 use crate::hardware::cpu::Cpu;
-use crate::hardware::bus::{BusState, SystemBus};
 use crate::hardware::memory::Dram;
+use crate::hardware::system_bus::{BusState, SystemBus};
 use crate::hardware::systolic::SystolicArray;
 
 pub struct SoC {
-    pub cpu: Cpu,                 // 코어 (Bus를 소유하지 않음)
-    pub systolic: SystolicArray,  // 가속기
-    pub dram: Dram,               // 메인 메모리
-    pub bus_state: BusState,      // 시스템 버스 중재 상태
+    pub cpu: Cpu,                // 코어 (Bus를 소유하지 않음)
+    pub systolic: SystolicArray, // 가속기
+    pub dram: Dram,              // 메인 메모리
+    pub bus_state: BusState,     // 시스템 버스 중재 상태
     pub cycle: u64,
 }
 
+// SoC는 CPU, 가속기, 메모리 등 여러 하드웨어 부품을 통합한 시스템입니다.
 impl SoC {
     pub fn new(mem_size: usize) -> Self {
         Self {
-            cpu: Cpu::new(), // Cpu 내부의 Bus 필드는 삭제해야 합니다.
+            cpu: Cpu::new(),
             systolic: SystolicArray::new(),
-            dram: Dram::new(mem_size), // 메모리 용량은 오직 Dram만 압니다!
+            dram: Dram::new(mem_size),
             bus_state: BusState::Ready,
             cycle: 0,
         }
@@ -37,11 +38,8 @@ impl SoC {
         self.bus_state = dma_bus.state;
 
         // 부품들의 참조를 모아 시스템 버스 인터페이스를 생성
-        let mut sys_bus = SystemBus::with_systolic(
-            self.bus_state,
-            &mut self.dram,
-            &mut self.systolic,
-        );
+        let mut sys_bus =
+            SystemBus::with_systolic(self.bus_state, &mut self.dram, &mut self.systolic);
 
         // 2. CPU 실행 (CPU가 버스/메모리에 접근할 수 있도록 컨텍스트를 묶어서 전달)
         // Rust의 Borrow Checker를 통과하기 위해 SoC의 필드들을 분리해서 참조로 넘깁니다.

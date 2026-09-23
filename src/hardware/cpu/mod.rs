@@ -6,11 +6,11 @@
 pub mod elements;
 pub mod pipeline_stage;
 
+use crate::hardware::system_bus::SystemBus;
 use elements::{
     alu::Alu, cache::L1Cache, control::branch_controller::BranchController,
     hazard_detection_unit::HazardDetectionUnit, register::RegisterFile,
 };
-use crate::hardware::bus::SystemBus;
 
 use pipeline_stage::{ExMemRegister, IdExRegister, IfIdRegister, MemWbRegister, StageStatus};
 use pipeline_stage::{execute, instruction_decode, instruction_fetch, memory_access, write_back};

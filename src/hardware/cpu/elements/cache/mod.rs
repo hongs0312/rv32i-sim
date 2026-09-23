@@ -1,6 +1,6 @@
 mod cache_line;
 
-use crate::hardware::{bus::SystemBus, cpu::StageStatus};
+use crate::hardware::{cpu::StageStatus, system_bus::SystemBus};
 use cache_line::CacheLine;
 
 #[derive(Clone, Copy, PartialEq, Eq)]

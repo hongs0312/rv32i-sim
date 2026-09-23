@@ -1,6 +1,6 @@
 use super::{ExMemRegister, MemWbRegister, StageStatus};
-use crate::hardware::bus::SystemBus;
 use crate::hardware::cpu::Cpu;
+use crate::hardware::system_bus::SystemBus;
 
 pub fn execute(
     cpu: &mut Cpu,

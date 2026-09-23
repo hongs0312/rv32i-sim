@@ -1,13 +1,9 @@
 use crate::hardware::cpu::Cpu;
-use crate::hardware::bus::SystemBus;
+use crate::hardware::system_bus::SystemBus;
 
 use super::{IfIdRegister, StageStatus};
 
-pub fn execute(
-    cpu: &mut Cpu,
-    bus: &mut SystemBus,
-    inject_nop: bool,
-) -> StageStatus<IfIdRegister> {
+pub fn execute(cpu: &mut Cpu, bus: &mut SystemBus, inject_nop: bool) -> StageStatus<IfIdRegister> {
     if inject_nop {
         return StageStatus::Complete(IfIdRegister {
             pc: cpu.pc,

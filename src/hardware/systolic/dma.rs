@@ -5,8 +5,8 @@
     시스템 메모리로부터 Systolic Array로 데이터를 로드하는 모듈
 */
 
-use crate::hardware::bus::SystemBus;
 use crate::hardware::cpu::pipeline_stage::StageStatus;
+use crate::hardware::system_bus::SystemBus;
 
 use super::{ARRAY_SIZE, INNER_DIM};
 

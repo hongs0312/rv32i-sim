@@ -114,7 +114,10 @@ impl<'a> SystemBus<'a> {
 
     // MMIO 읽기 (Systolic 참조 필요)
     pub fn read_mmio(&self, addr: u32) -> u32 {
-        let systolic = self.systolic.as_deref().expect("MMIO requires systolic device");
+        let systolic = self
+            .systolic
+            .as_deref()
+            .expect("MMIO requires systolic device");
         match addr {
             0x8000_0000 => systolic.status,
             0x8000_0020 => systolic.global_time,
@@ -123,11 +126,7 @@ impl<'a> SystemBus<'a> {
     }
 
     // MMIO 쓰기 (Systolic 가변 참조 필요)
-    pub fn write_mmio(
-        &mut self,
-        addr: u32,
-        value: u32,
-    ) -> Result<u32, ()> {
+    pub fn write_mmio(&mut self, addr: u32, value: u32) -> Result<u32, ()> {
         let systolic = self
             .systolic
             .as_deref_mut()
@@ -140,11 +139,7 @@ impl<'a> SystemBus<'a> {
             0x8000_0010 => {
                 if value == 1 {
                     // 시작 트리거!
-                    systolic.start(
-                        systolic.dma.addr_a,
-                        systolic.dma.addr_b,
-                        systolic.addr_c,
-                    );
+                    systolic.start(systolic.dma.addr_a, systolic.dma.addr_b, systolic.addr_c);
                 }
             }
             _ => return Err(()),
