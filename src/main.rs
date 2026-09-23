@@ -36,7 +36,7 @@ fn compile_and_extract(c_path: &str) -> Vec<u32> {
             "-mno-relax",
             // "-Ttext=0x0",
             "-T",
-            "linker.ld",
+            "files/linker.ld",
             "files/entry.s",
             c_path,
             "-o",
