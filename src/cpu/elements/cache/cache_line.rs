@@ -19,18 +19,22 @@ impl CacheLine {
         }
     }
 
+    // 16바이트 블록에서 특정 오프셋의 32비트 데이터를 읽음
     pub fn read32(&self, offset: usize) -> u32 {
         let bytes = &self.data[offset..offset + 4];
         u32::from_le_bytes(bytes.try_into().expect("Slice with incorrect length"))
     }
 
-    pub fn read8(&self, offset: usize) -> u8 {
-        self.data[offset]
-    }
-
+    // 16바이트 블록에서 특정 오프셋에 32비트 데이터를 씀
     pub fn write32(&mut self, offset: usize, value: u32) {
         let bytes = value.to_le_bytes();
         self.data[offset..offset + 4].copy_from_slice(&bytes);
+        self.dirty = true; // 데이터가 변경되었음을 표시
+    }
+
+    pub fn write16(&mut self, offset: usize, value: u16) {
+        let bytes = value.to_le_bytes();
+        self.data[offset..offset + 2].copy_from_slice(&bytes);
         self.dirty = true; // 데이터가 변경되었음을 표시
     }
 
